@@ -2,28 +2,290 @@
 title: "Prototype"
 category: "Creational"
 order: 4
-intent: "Create new objects by copying existing instances."
-keywords: ["clone", "copy"]
-status: "planned"
-related: []
+intent: "Create new objects by copying configured instances through a common copy contract."
+keywords: ["clone", "copy", "deep copy", "shallow copy", "template", "registry", "isolation"]
+status: "complete"
+related: ["builder", "abstract-factory", "factory-method", "memento", "flyweight"]
 ---
 
-> This guide is planned. The intent below is available now; the implementation walkthrough is still to come.
+import PrototypeSource from '../../components/PrototypeSource.astro';
+import PrototypeDiagrams from '../../components/PrototypeDiagrams.astro';
+import { path } from '../../data/navigation';
 
-## Intent
+## The idea in plain English
 
-Create new objects by copying existing instances.
+**Prototype creates a new object by asking an existing object to copy itself.** The existing object already contains useful configuration. The client requests a copy through a common contract and customizes the result without rebuilding every detail.
 
-## Guide outline
+Imagine an engineering-report template with a title, a tool list, and footer settings. Copy that template to begin a software report, then change its title, add GitLab, and update the footer. The original should keep its own values.
 
-- The problem and a plain-English explanation
-- At least three practical use cases
-- Pattern roles and a UML class diagram
-- A step-by-step Java 21 implementation
-- Runtime sequence and expected output
-- An extension exercise and behavior checks
-- Tradeoffs, alternatives, and reference links
+The concrete prototype knows how to copy its internal state. The copying client does not need to know its constructors or the details of its nested objects.
 
-## Related patterns
+> Choose Prototype when configured instances are natural starting points and a well-defined copy operation is simpler than reconstructing them.
 
-Related-pattern comparisons will be added with the full guide.
+## The problem before the pattern
+
+A client could reconstruct a report by reading all its fields:
+
+```java
+// Illustrative pseudocode: the client now knows the object's structure.
+ReportTemplate copy = new ReportTemplate(original.title());
+for (String tool : original.tools()) copy.addTool(tool);
+copy.footer(original.layout().footer());
+```
+
+That exposes internal configuration and makes every copying client responsible for future fields. A plain assignment is even less helpful:
+
+```java
+ReportTemplate copy = original; // Another reference to the same object.
+```
+
+Prototype moves copying into the object that owns the state. It does not automatically solve every copying problem: you must decide which state to duplicate, share, reset, or reject.
+
+## Practical use cases
+
+1. **Report templates:** begin from approved sections, tools, and layout settings, then customize an independent report.
+2. **Simulation scenarios:** copy a baseline configuration before changing boundary conditions or solver settings; handle external resources separately.
+3. **Diagram editors:** duplicate a configured shape or group without requiring the editor to know each concrete shape’s constructor.
+4. **Test fixtures:** copy a known baseline, then change only the values relevant to a test.
+
+Copying may avoid expensive setup, but it is not inherently faster than construction. Measure if performance is the reason for choosing it.
+
+## Structure and pattern roles
+
+<PrototypeDiagrams kind="structure" />
+
+| GoF role | Java type | Responsibility |
+| --- | --- | --- |
+| Prototype | `ReportPrototype` | Declare `copy()` and the report’s domain operations. |
+| Concrete Prototype | `ReportTemplate` | Copy its title, tool list, and nested layout according to policy. |
+| Client | `PrototypeRegistry.create` and the demo | Request copies through the prototype interface. |
+| Optional registry | `PrototypeRegistry` | Store named baselines and return independent copies. |
+| Nested mutable state | `Layout`, `List<String>` | Be copied so edits cannot leak into another report. |
+
+A registry is optional; `original.copy()` is sufficient when the client already has the prototype. One concrete implementation is enough to illustrate the pattern. The interface also lets the registry accept future implementations without learning their constructors.
+
+## Copy policy: shallow and deep
+
+| State | This example’s policy | Reason |
+| --- | --- | --- |
+| Title and individual tool strings | Share the immutable values | Strings cannot be changed in place. |
+| Tool list | Allocate a new list | Adding a tool must affect only one report. |
+| Nested `Layout` | Allocate a new object | Changing a footer must not affect the source. |
+| Registry entry | Copy on registration and retrieval | Protect the stored baseline from caller edits. |
+
+A **shallow copy** creates a new outer object but retains references to nested objects. A **deep copy** also duplicates the relevant mutable objects reachable from it. Copy depth is a domain policy, not a promise to blindly clone everything.
+
+This example copies all owned mutable state. Its list elements and footer value are strings, so they can safely be shared. Replacing strings with mutable tool objects would require revisiting that policy.
+
+## Java walkthrough
+
+### 1. Define the copy contract
+
+```java
+interface ReportPrototype {
+    ReportPrototype copy();
+    void rename(String title);
+    void addTool(String tool);
+    void footer(String text);
+    String render();
+}
+```
+
+Here `copy()` promises a distinct report with equivalent starting content and independent owned mutable state. The other methods express how the client customizes and views a report. A real application should keep its domain interface focused on the operations its clients need.
+
+### 2. Model a nested mutable object
+
+```java
+static final class Layout {
+    private String footer = "";
+    Layout() { }
+    Layout(Layout source) { footer = source.footer; }
+}
+```
+
+A copied `Layout` gets its own field. The field initially points to the same immutable string, but assigning a new footer later affects only that layout.
+
+### 3. Centralize copying in a private constructor
+
+```java
+private ReportTemplate(ReportTemplate source) {
+    title = source.title;
+    tools = new ArrayList<>(source.tools);
+    layout = new Layout(source.layout);
+}
+
+@Override
+public ReportTemplate copy() {
+    return new ReportTemplate(this);
+}
+```
+
+The list and layout receive independent identities. `ReportTemplate` is final, so the copy constructor cannot accidentally slice off unknown subclass state. Its covariant return type allows a caller with a concrete template to receive a concrete copy, while the registry continues using `ReportPrototype`.
+
+A copy constructor alone is useful, but callers invoking it directly must know the concrete type. The polymorphic `copy()` contract is what lets clients copy through the abstraction.
+
+### 4. Protect named baselines
+
+```java
+public void register(String name, ReportPrototype prototype) {
+    prototypes.put(requiredText(name),
+            Objects.requireNonNull(prototype, "prototype").copy());
+}
+
+public ReportPrototype create(String name) {
+    ReportPrototype prototype = prototypes.get(requiredText(name));
+    if (prototype == null) throw new IllegalArgumentException("Unknown prototype: " + name);
+    return prototype.copy();
+}
+```
+
+Copying during registration prevents later edits to the supplied object from changing the saved baseline. Copying during retrieval prevents a caller from editing the saved baseline through its result. Registering an existing name replaces that baseline; unknown names fail explicitly.
+
+This registry trusts implementations to honor the copy contract. It is a single-threaded teaching example, not a concurrent template repository.
+
+### 5. Copy and customize
+
+```java
+ReportPrototype copy = registry.create("engineering");
+copy.rename("Software Tools");
+copy.addTool("GitLab");
+copy.footer("Draft");
+```
+
+The client never calls the copy constructor or reaches into `Layout`. The registry also uses only the prototype interface.
+
+## Runtime copy workflow
+
+<PrototypeDiagrams kind="copy" />
+
+The demo creates an original, registers its snapshot, retrieves another copy, and customizes it. At the end, the original, stored baseline, and returned copy have separate tool lists and layouts.
+
+For copying while another thread mutates the source, a thread-safe map alone is insufficient. You would need a consistent snapshot policy for the object being copied as well.
+
+## Complete runnable example
+
+This listing and its download come from the same Java source verified by CI. It targets **Java 21** and is runnable as one file.
+
+<a href={path('downloads/PrototypeDemo.java')} download="PrototypeDemo.java">Download PrototypeDemo.java ↓</a>
+
+<PrototypeSource />
+
+### Compile and run
+
+From the repository root:
+
+```bash
+cd examples/prototype
+javac --release 21 PrototypeDemo.java
+java PrototypeDemo
+```
+
+Or use the source launcher:
+
+```bash
+java PrototypeDemo.java
+```
+
+Expected output:
+
+```text
+ORIGINAL
+Engineering Tools
+- Cameo
+- Windchill
+[Footer: Internal review]
+
+COPY
+Software Tools
+- Cameo
+- Windchill
+- GitLab
+[Footer: Draft]
+```
+
+Titles, tool values, and registry names must be non-null and nonblank. Footers may be empty to omit them, but cannot be null. Rendering is deliberately plain text and assumes simple single-line values.
+
+## Java clone versus an explicit copy method
+
+Java’s `Object.clone()` copies fields without recursively copying the objects those fields reference. `Cloneable` is a marker interface; it does not declare a callable `clone()` method. Using it does not automatically provide the independent nested state required here.
+
+This guide uses an explicit `copy()` contract and constructors so its ownership choices are visible. Prototype does not require `Cloneable`, `Object.clone()`, serialization, or reflection.
+
+If integrating with an existing clone-based API, read its documented contract carefully. A cloned container may still contain references to the original mutable elements.
+
+## Extend it: add a new prototype implementation
+
+Add a second implementation representing a checklist with different internal fields. Implement the same report operations and `copy()` contract, then register an instance under a new name. The registry should not need a type switch or a concrete constructor call.
+
+For a smaller exercise, add a mutable `PageSettings` object to `ReportTemplate` with an orientation field:
+
+1. Configure orientation on the original.
+2. Copy the settings in the copy constructor.
+3. Change orientation on the copy.
+4. Verify the original and registry baseline remain unchanged.
+
+If you later add a persistent identifier, decide whether duplication retains it or creates a new identity. Do not silently copy database IDs or external-resource handles just because they are fields.
+
+## Verification
+
+`PrototypeChecks.java` verifies:
+
+- Distinct copy identity and equal starting content.
+- Independent title, tool-list, and nested-layout changes in both directions.
+- Isolation from edits after registry registration and after retrieval.
+- Empty report copying and explicit baseline replacement.
+- Rejection of unknown names, blank required text, and null values.
+
+```bash
+cd examples/prototype
+javac --release 21 PrototypeDemo.java PrototypeChecks.java
+java PrototypeChecks
+```
+
+Failures throw `AssertionError`; no `-ea` flag is needed. CI compiles and checks all four completed examples on JDK 21. Copy isolation is verified through domain behavior, rather than merely comparing references.
+
+## Tradeoffs and common mistakes
+
+| Concern | Design consequence |
+| --- | --- |
+| New mutable field | Update the copy policy and isolation checks. |
+| Mutable list elements | Copying the list alone is insufficient. |
+| Shared subgraphs or cycles | A naive recursive copy may duplicate aliases or loop; use identity tracking when those relationships must be preserved. |
+| External resources | Decide whether to reconnect, share safely, reset, or prohibit copying. |
+| Large state | Copy cost and memory may outweigh construction savings. |
+
+Do not confuse another reference with another object. Do not assume a final field makes its referenced object immutable. Avoid exposing stored prototypes directly, and do not use serialization as an unexplained copying shortcut.
+
+A copy also needs its own lifecycle rules: should transient caches be cleared, audit metadata retained, or IDs regenerated? The answer depends on what “duplicate” means in the domain.
+
+## Compare related approaches
+
+| Approach | Starting point | Compared with Prototype |
+| --- | --- | --- |
+| Builder | A construction recipe and named choices | Builds step by step; Prototype begins with an already configured instance. |
+| Abstract Factory | A selected family of related products | Chooses compatible types; a factory can use prototype copies internally. |
+| Factory Method | A subclass-controlled creation hook | Varies creation through inheritance rather than copying a runtime instance. |
+| Memento | A captured state for later restoration | Restores an originator rather than primarily producing a new domain instance. |
+| Flyweight | Shared reusable state | Shares state intentionally; Prototype must decide which state each copy owns. |
+
+Builder and Prototype can cooperate: build and validate a baseline once, then use copies as starting points. Immutable configuration with a small `with...` method or a direct constructor may be simpler for small value objects.
+
+<a href={path('patterns/builder/')}>Builder guide →</a> · <a href={path('patterns/abstract-factory/')}>Abstract Factory guide →</a> · <a href={path('patterns/factory-method/')}>Factory Method guide →</a> · <a href={path('patterns/memento/')}>Memento outline →</a>
+
+## Quick reference
+
+- **Intent:** create new objects from configured instances.
+- **Recognize it:** runtime templates and expensive or repetitive reconstruction.
+- **Prototype:** owns the copy policy behind a common interface.
+- **Registry:** optionally selects named baselines.
+- **Verify:** identity, initial content, and isolation of every owned mutable field.
+- **Ask first:** would an immutable value, constructor, or builder be clearer?
+
+## References
+
+- [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). The original GoF catalog; see Prototype in the creational patterns.
+- [Oracle Java 21 — Object.clone](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Object.html#clone()). Field-copy behavior and the responsibility for nested mutable state.
+- [Oracle Java 21 — Cloneable](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Cloneable.html). The marker-interface contract and its limitations.
+- [Refactoring.Guru — Prototype](https://refactoring.guru/design-patterns/prototype). An illustrated secondary explanation of copying through a prototype abstraction.
+
+The report example and explanations are original teaching material. Names and roles follow the GoF catalog.
