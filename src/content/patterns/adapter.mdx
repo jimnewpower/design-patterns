@@ -2,28 +2,289 @@
 title: "Adapter"
 category: "Structural"
 order: 6
-intent: "Translate an existing interface into the one a client expects."
-keywords: ["convert", "legacy", "integration"]
-status: "planned"
-related: ["bridge"]
+intent: "Make an existing interface usable through the interface a client expects."
+keywords: ["convert", "legacy", "integration", "wrapper", "units", "object adapter", "translation"]
+status: "complete"
+related: ["bridge", "decorator", "facade", "proxy"]
 ---
 
-> This guide is planned. The intent below is available now; the implementation walkthrough is still to come.
+import AdapterSource from '../../components/AdapterSource.astro';
+import AdapterDiagrams from '../../components/AdapterDiagrams.astro';
+import { path } from '../../data/navigation';
 
-## Intent
+## The idea in plain English
 
-Translate an existing interface into the one a client expects.
+**Adapter translates an existing component’s interface into the interface your application expects.** It wraps the component, accepts calls in the application’s vocabulary, and delegates through the existing API.
 
-## Guide outline
+Imagine an engineering application that checks part lengths in millimeters. An older CAD API returns a part record containing inches. The application should not repeat vendor-specific lookups and unit conversions in every clearance check.
 
-- The problem and a plain-English explanation
-- At least three practical use cases
-- Pattern roles and a UML class diagram
-- A step-by-step Java 21 implementation
-- Runtime sequence and expected output
-- An extension exercise and behavior checks
-- Tradeoffs, alternatives, and reference links
+A CAD length adapter implements the application’s `PartLengthSource` interface. It calls the old API, extracts the length, converts it, and translates the missing-part error. The client continues working in millimeters.
 
-## Related patterns
+> Use Adapter when you need an existing component and its interface or semantics do not match the client’s contract.
 
-- [Bridge](../bridge/)
+## The problem before the pattern
+
+Without an adapter, integration details leak into business logic:
+
+```java
+// Illustrative code inside a clearance check.
+LegacyPart part = legacy.lookupPart(partId);
+BigDecimal millimeters = part.lengthInches().multiply(new BigDecimal("25.4"));
+boolean fits = millimeters.compareTo(limit) <= 0;
+```
+
+Repeated conversions create opportunities for unit mistakes and inconsistent error handling. The client now knows the legacy method name, data shape, units, and failure vocabulary.
+
+Move the translation into an object implementing the expected interface. Keep the clearance decision in the client. Adapter changes how a dependency is used; it does not require changing the original component.
+
+## Practical use cases
+
+1. **Engineering-tool integration:** translate units, identifiers, and data structures between a tool API and an application’s domain interfaces.
+2. **Legacy service modernization:** wrap an older client library behind a stable application contract while callers migrate incrementally.
+3. **Vendor replacement:** implement the same target interface for a new vendor so business workflows can stay stable.
+4. **Data-format boundaries:** expose an existing parser or storage API through the record types and errors expected by consuming code.
+
+An adapter cannot manufacture missing capabilities. If an API provides only estimated length, wrapping it cannot satisfy a target contract promising certified dimensions without additional evidence.
+
+## Structure and pattern roles
+
+<AdapterDiagrams kind="structure" />
+
+| GoF role | Java type | Responsibility |
+| --- | --- | --- |
+| Target | `PartLengthSource` | Define the millimeter-valued lookup expected by the application. |
+| Adaptee | `LegacyCadClient` | Provide the existing inch-valued part lookup. |
+| Adapter | `CadLengthAdapter` | Implement the target by delegating and translating. |
+| Client | `ClearanceCheck` | Decide whether a length fits a supplied limit. |
+| Adapted result | `BigDecimal` | Express length in the target unit without implicit rounding. |
+
+The legacy API here is an in-memory teaching stand-in, not an implementation of Creo, Windchill, or any vendor SDK. Its `LegacyPart` record, lookup method, and missing-part exception illustrate an existing incompatible contract.
+
+## Define the translation contract
+
+| Boundary concern | Existing API | Target behavior |
+| --- | --- | --- |
+| Operation | `lookupPart(number)` | `lengthMillimeters(partId)` |
+| Result | `LegacyPart` record | A nonnegative `BigDecimal` length |
+| Unit | Inches | Millimeters, using exactly 25.4 mm per inch |
+| Missing part | `LegacyPartMissingException` | `IllegalArgumentException`, preserving the cause |
+| Blank identifier | Not validated by the legacy lookup | Reject before delegation |
+| Invalid negative length | May exist in the simulated source | Reject as invalid source state |
+
+Identifiers are passed through unchanged; no trimming or case folding is assumed. Null identifiers are rejected with `NullPointerException`. This adapter is a read-only, one-way translation; it does not implement synchronization back to the source.
+
+## Java walkthrough
+
+### 1. Define the target interface
+
+```java
+interface PartLengthSource {
+    BigDecimal lengthMillimeters(String partId);
+}
+```
+
+Specify the unit in the API contract. A generic `getLength()` method makes an important assumption invisible. A larger system could introduce a validated quantity type rather than passing raw decimals.
+
+### 2. Describe the existing API
+
+```java
+record LegacyPart(String number, BigDecimal lengthInches) { }
+
+LegacyPart part = legacy.lookupPart("BRACKET-01");
+```
+
+The old API returns more than the client needs and uses a different unit. The adapter receives that API through its constructor instead of constructing it internally.
+
+### 3. Wrap and delegate
+
+```java
+static final class CadLengthAdapter implements PartLengthSource {
+    private static final BigDecimal MM_PER_INCH = new BigDecimal("25.4");
+    private final LegacyCadClient legacy;
+
+    CadLengthAdapter(LegacyCadClient legacy) {
+        this.legacy = Objects.requireNonNull(legacy, "legacy");
+    }
+
+    @Override
+    public BigDecimal lengthMillimeters(String partId) {
+        Objects.requireNonNull(partId, "partId");
+        if (partId.isBlank()) throw new IllegalArgumentException("Part ID must not be blank");
+        try {
+            LegacyPart part = legacy.lookupPart(partId);
+            if (part.lengthInches().signum() < 0) {
+                throw new IllegalStateException("Negative legacy length: " + partId);
+            }
+            return part.lengthInches().multiply(MM_PER_INCH);
+        } catch (LegacyPartMissingException missing) {
+            throw new IllegalArgumentException("Unknown part: " + partId, missing);
+        }
+    }
+}
+```
+
+Using decimal string constructors avoids introducing a binary floating-point approximation. Multiplication has no rounding policy here; presentation precision and engineering tolerances are separate decisions.
+
+Catch the specific legacy failure you can translate. Broadly catching every exception and returning zero would turn integration failures into apparently valid geometry.
+
+### 4. Keep domain decisions in the client
+
+```java
+public boolean fits(String partId, BigDecimal maxMillimeters) {
+    Objects.requireNonNull(maxMillimeters, "maxMillimeters");
+    if (maxMillimeters.signum() < 0) throw new IllegalArgumentException("Limit must not be negative");
+    return source.lengthMillimeters(partId).compareTo(maxMillimeters) <= 0;
+}
+```
+
+Equality counts as fitting. `compareTo` compares numeric values regardless of decimal scale, so `63.50` and `63.500` represent the same boundary for this rule. This is a simplified length-only check, not a physical tolerance or collision-analysis model.
+
+### 5. Wire the adapter at startup
+
+```java
+PartLengthSource source = new CadLengthAdapter(legacy);
+ClearanceCheck check = new ClearanceCheck(source);
+```
+
+The client knows only the target. A new native millimeter-valued source could implement the same interface without changing the clearance logic.
+
+## Runtime sequence
+
+<AdapterDiagrams kind="sequence" />
+
+For a stored length of 2.5 inches, the adapter returns 63.50 millimeters. The clearance check compares that value to a 70 mm limit and returns true.
+
+In a real remote API, the adapter also needs documented latency, cancellation, retry, and resource-ownership behavior. Retrying a write can duplicate side effects; wrapping an API does not make all calls safe to retry. This demo has no network requests or external credentials.
+
+## Complete runnable example
+
+The listing and download use the same source file checked by CI. The example targets **Java 21** and runs as a single file.
+
+<a href={path('downloads/AdapterDemo.java')} download="AdapterDemo.java">Download AdapterDemo.java ↓</a>
+
+<AdapterSource />
+
+### Compile and run
+
+From the repository root:
+
+```bash
+cd examples/adapter
+javac --release 21 AdapterDemo.java
+java AdapterDemo
+```
+
+Or use the source launcher:
+
+```bash
+java AdapterDemo.java
+```
+
+Expected output:
+
+```text
+BRACKET-01: 63.50 mm
+Fits 70 mm limit: true
+```
+
+The simulated legacy client copies its map and stores immutable decimals. The adapter performs no mutation, so repeated calls do not change the original inch-valued data. A wrapper around a mutable or non-thread-safe SDK would need its own lifecycle and concurrency policy.
+
+## Object adapter versus class adapter
+
+This is an **object adapter**: it implements the target and holds an adaptee reference. Composition works even when the adaptee class is final, as this example’s class is.
+
+A **class adapter** uses inheritance to adapt an existing class. Java can extend one class and implement a target interface, but cannot inherit from two classes. Inheritance also ties the adapter to the adaptee’s extension rules and may expose methods the application should not use.
+
+Prefer composition when replacing, configuring, or testing the adaptee independently matters. An adapter can be one-way or support translation in both directions; that choice comes from the target contract, not from the name of the pattern.
+
+## Extend it: a second source
+
+Add a native millimeter-valued implementation:
+
+```java
+PartLengthSource nativeSource = partId -> {
+    if (!"BRACKET-01".equals(partId)) {
+        throw new IllegalArgumentException("Unknown part: " + partId);
+    }
+    return new BigDecimal("63.50");
+};
+boolean fits = new ClearanceCheck(nativeSource)
+        .fits("BRACKET-01", new BigDecimal("70"));
+```
+
+This small exercise is a test stand-in, not a complete source API. It demonstrates substituting a target implementation without changing the client.
+
+For an adapter exercise, wrap a second API that returns micrometers as an integer. Convert to millimeters with an explicit decimal scale and reuse the same clearance cases. Keep missing-part semantics consistent across both sources.
+
+**Exercise:** introduce a target-specific `PartNotFoundException` instead of `IllegalArgumentException`. Update both adapters and their contract checks without exposing vendor exceptions as the public error type. Preserve underlying causes for diagnostics.
+
+## Verification
+
+`AdapterChecks.java` checks:
+
+- Exact decimal conversion, fractional inches, and zero length.
+- Equal-boundary acceptance and over-limit rejection.
+- Preservation of the legacy inch-valued result.
+- Missing-part exception translation with the original cause.
+- Blank/null identifiers, negative source values, and invalid limits.
+- Client substitution with another target implementation.
+
+```bash
+cd examples/adapter
+javac --release 21 AdapterDemo.java AdapterChecks.java
+java AdapterChecks
+```
+
+Failures throw `AssertionError`; no `-ea` flag is needed. CI compiles and checks all six completed examples on JDK 21. Real SDK integrations also need contract tests against supported vendor versions and representative source data.
+
+## Tradeoffs and common mistakes
+
+| Concern | What the adapter must decide |
+| --- | --- |
+| Units and precision | Convert explicitly; do not hide rounding or uncertainty. |
+| Errors | Map meaningful failures and preserve diagnostic context. |
+| Missing capabilities | Reject unsupported behavior rather than pretending it succeeded. |
+| Ownership | State whether the wrapper or its caller closes the adaptee. |
+| Schema changes | Update translation and boundary tests when source contracts change. |
+| Performance | Account for extra calls, copies, and remote lookups. |
+
+Avoid letting vendor types leak through the target interface. Avoid filling the adapter with clearance decisions or other business policies. Do not confuse renaming methods with satisfying their semantics: units, nullability, ordering, side effects, and failures all matter.
+
+## Compare related patterns
+
+| Pattern | Intent | Compared with Adapter |
+| --- | --- | --- |
+| Bridge | Let abstraction and implementation evolve independently | Usually plans two dimensions of variation; Adapter reconciles an existing mismatch. |
+| Decorator | Add behavior through wrapping | Usually preserves the wrapped contract; Adapter translates into another contract. |
+| Facade | Simplify access to a subsystem | Provides a convenient entry point rather than necessarily implementing an existing target contract. |
+| Proxy | Control access to an object | Usually preserves its contract while managing access or location. |
+
+These shapes can overlap in implementation. Identify the primary intent and promised contract rather than classifying every wrapper by its syntax alone.
+
+<a href={path('patterns/bridge/')}>Bridge outline →</a> · <a href={path('patterns/decorator/')}>Decorator outline →</a> · <a href={path('patterns/facade/')}>Facade outline →</a> · <a href={path('patterns/proxy/')}>Proxy outline →</a>
+
+## Java API connections
+
+`InputStreamReader` accepts a byte stream and exposes the character-oriented `Reader` API while decoding bytes using a charset. It is useful to examine in an adapter role. Its documentation uses the word “bridge” descriptively; that wording alone is not a declaration of the GoF Bridge pattern. Specify a charset when the boundary requires predictable decoding.
+
+`Arrays.asList` exposes an array through a `List` view. The view is fixed-size and backed by the array; it is not an independent copy or a fully resizable list. This demonstrates why an adapted interface still needs a precise behavioral contract.
+
+## Quick reference
+
+- **Intent:** translate an existing component into the expected contract.
+- **Target:** what the client already needs.
+- **Adaptee:** the existing incompatible API.
+- **Adapter:** delegate, convert, and preserve semantics.
+- **Verify:** values, units, boundaries, errors, and ownership.
+- **Ask first:** does the adaptee really support the promised behavior?
+
+## References
+
+- [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). The original GoF catalog; see Adapter in the structural patterns.
+- [Oracle Java 21 — InputStreamReader](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/io/InputStreamReader.html). Byte-to-character adaptation and charset selection.
+- [Oracle Java 21 — Arrays.asList](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html#asList(T...)). A fixed-size list view backed by an array.
+- [NIST — SI Units: Length](https://www.nist.gov/pml/owm/si-units-length). The exact inch-to-millimeter conversion used in the example.
+- [Oracle Java 21 — BigDecimal](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/math/BigDecimal.html). Decimal construction, arithmetic, and numeric comparison.
+- [Refactoring.Guru — Adapter](https://refactoring.guru/design-patterns/adapter). An illustrated secondary explanation of object and class adapters.
+
+The CAD API and integration example are original teaching material, with no dependency on a vendor SDK. Pattern names and roles follow the GoF catalog.

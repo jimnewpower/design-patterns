@@ -13,7 +13,7 @@ const builderGuide = await readFile('dist/patterns/builder/index.html','utf8');
 assert.ok(builderGuide.includes('Complete guide') && !builderGuide.includes('This guide is planned'));
 assert.ok(builderGuide.includes('TextReportBuilder') && builderGuide.includes('Runtime sequence') && builderGuide.includes('<svg'));
 const home = await readFile('dist/index.html','utf8');
-assert.ok(home.includes('5 complete guides'), 'Homepage reflects completed guides');
+assert.ok(home.includes('6 complete guides'), 'Homepage reflects completed guides');
 for(const slug of patternDirs) assert.ok(home.includes(`patterns/${slug}/`),`Homepage links ${slug}`);
 let count=0;
 async function scan(dir) {
@@ -61,3 +61,9 @@ assert.equal(await readFile('dist/downloads/SingletonDemo.java','utf8'), singlet
 const singletonGuide = await readFile('dist/patterns/singleton/index.html','utf8');
 assert.ok(singletonGuide.includes('Complete guide') && !singletonGuide.includes('This guide is planned'));
 assert.ok(singletonGuide.includes('ReportFormats') && singletonGuide.includes('Runtime scope and concurrency') && singletonGuide.includes('<svg'));
+
+const adapterSource = await readFile('examples/adapter/AdapterDemo.java','utf8');
+assert.equal(await readFile('dist/downloads/AdapterDemo.java','utf8'), adapterSource, 'Adapter download matches tested source');
+const adapterGuide = await readFile('dist/patterns/adapter/index.html','utf8');
+assert.ok(adapterGuide.includes('Complete guide') && !adapterGuide.includes('This guide is planned'));
+assert.ok(adapterGuide.includes('CadLengthAdapter') && adapterGuide.includes('Runtime sequence') && adapterGuide.includes('<svg'));
