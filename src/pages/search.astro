@@ -1,0 +1,9 @@
+---
+import Base from '../layouts/Base.astro';
+import '@pagefind/default-ui/css/ui.css';
+---
+<Base title="Search the field guide"><main id="main" class="search-page"><p class="eyebrow">Find a pattern</p><h1>What problem are you solving?</h1><p class="intro">Search names, explanations, and Java examples. Try “related objects”, “wrapping”, or “notifications”.</p><div id="search"></div><p id="search-status" role="status"></p><p class="muted">Planned guides are included and clearly labeled. Full-text search is available after a production build.</p></main></Base>
+<script>
+import { PagefindUI } from '@pagefind/default-ui';
+new PagefindUI({ element: '#search', showSubResults: true, baseUrl: import.meta.env.BASE_URL, bundlePath: `${import.meta.env.BASE_URL.replace(/\/$/,'')}/pagefind/` });
+</script>
