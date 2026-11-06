@@ -24,6 +24,15 @@ jobs:
           path: dist
   java:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - pattern: abstract-factory
+            demo: AbstractFactoryDemo
+            checks: AbstractFactoryChecks
+          - pattern: builder
+            demo: BuilderDemo
+            checks: BuilderChecks
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -31,9 +40,9 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Compile and check the example
-        working-directory: examples/abstract-factory
+        working-directory: examples/${{ matrix.pattern }}
         run: |
-          javac --release 21 AbstractFactoryDemo.java AbstractFactoryChecks.java
-          java AbstractFactoryChecks
-          java AbstractFactoryDemo text
-          java AbstractFactoryDemo html
+          javac --release 21 ${{ matrix.demo }}.java ${{ matrix.checks }}.java
+          java ${{ matrix.checks }}
+          java ${{ matrix.demo }} text
+          java ${{ matrix.demo }} html
