@@ -1,0 +1,3 @@
+Shared style: true
+Cameo @10 [Mono 12]
+GitLab @40 [Mono 12]

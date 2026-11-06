@@ -3,28 +3,149 @@ title: "Strategy"
 category: "Behavioral"
 order: 21
 intent: "Make alternative algorithms interchangeable."
-keywords: ["algorithm", "policy"]
-status: "planned"
-related: ["state", "abstract-factory"]
+keywords: ["algorithm", "policy", "strategy", "example", "Java"]
+status: "complete"
+related: ["state", "template-method", "bridge"]
 ---
 
-> This guide is planned. The intent below is available now; the implementation walkthrough is still to come.
+import SourceListing from '../../components/SourceListing.astro';
+import PatternDiagram from '../../components/PatternDiagram.astro';
+import RuntimeSteps from '../../components/RuntimeSteps.astro';
+import { path } from '../../data/navigation';
 
-## Intent
+## The idea in plain English
 
-Make alternative algorithms interchangeable.
+Strategy makes alternative algorithms interchangeable behind one contract. A tool report can preserve supplied order or sort alphabetically. The report delegates ordering and keeps its own job of joining the resulting names.
 
-## Guide outline
+> Interchangeability is a behavioral promise, not just a matching method signature.
 
-- The problem and a plain-English explanation
-- At least three practical use cases
-- Pattern roles and a UML class diagram
-- A step-by-step Java 21 implementation
-- Runtime sequence and expected output
-- An extension exercise and behavior checks
-- Tradeoffs, alternatives, and reference links
+## The problem before the pattern
 
-## Related patterns
+If one report class selects every sorting policy through growing conditionals, algorithm choices and report assembly become coupled. Inject an Ordering strategy so either responsibility can change without editing the other.
 
-- [State](../state/)
-- [Abstract Factory](../abstract-factory/)
+## Practical use cases
+
+1. Ordering or scoring policies for reports.
+2. Routing algorithms chosen by application configuration.
+3. Pricing calculations with explicit business policies.
+4. Simulation solver selection behind a stable algorithm contract.
+
+## Structure and pattern roles
+
+<PatternDiagram {...{"id": "strategy-roles", "title": "Strategy role relationships", "description": "ToolReport: Context; Ordering: Strategy interface; Alphabetical: Concrete strategy; AsProvided: Concrete strategy. Interchangeability is a behavioral promise, not just a matching method signature.", "nodes": [{"title": "ToolReport", "role": "Context", "detail": "ordering: Ordering"}, {"title": "Ordering", "role": "Strategy interface", "detail": "order(values)"}, {"title": "Alphabetical", "role": "Concrete strategy", "detail": "natural string ordering"}, {"title": "AsProvided", "role": "Concrete strategy", "detail": "preserves encounter order"}], "edges": [{"to": 1, "label": "delegates", "relation": "uses", "from": 0}, {"to": 1, "label": "implements", "relation": "implements", "from": 2}, {"to": 1, "label": "implements", "relation": "implements", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+
+| Role | Java types | Responsibility |
+| --- | --- | --- |
+| Context | ToolReport | Owns report assembly and uses an injected Ordering. |
+| Strategy | Ordering | Declares list ordering. |
+| Concrete strategies | Alphabetical, AsProvided | Implement alternative ordering policies. |
+| Client | main | Chooses the policy at construction. |
+
+## Java walkthrough
+
+### 1. Define a precise algorithm contract
+
+Strategies return tool names in their chosen order. Inputs are validated and copied by the context.
+
+### 2. Implement interchangeable policies
+
+Alphabetical sorts by Java natural String ordering. AsProvided preserves input order; both return stable lists.
+
+### 3. Delegate from context
+
+ToolReport supplies a defensive input snapshot, validates the returned list, and joins it.
+
+### 4. Substitute without a context edit
+
+A lambda can implement the functional strategy contract, as the reverse-order test demonstrates.
+
+The key collaboration is visible here (imports and surrounding types are in the complete listing):
+
+```java
+List<String> ordered = List.copyOf(ordering.order(List.copyOf(values)));
+```
+
+## Runtime sequence
+
+<RuntimeSteps id="strategy-runtime" title="One concrete execution trace" steps={[{"label": "Select policy", "detail": "Client constructs ToolReport with Alphabetical."}, {"label": "Snapshot inputs", "detail": "Context validates and copies supplied tool names."}, {"label": "Execute strategy", "detail": "Ordering returns sorted names without changing caller data."}, {"label": "Assemble report", "detail": "Context joins the strategy result into one string."}]} />
+
+## Complete runnable example
+
+This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+
+<a href={path('downloads/StrategyDemo.java')} download="StrategyDemo.java">Download StrategyDemo.java ↓</a>
+
+<SourceListing slug="strategy" prefix="Strategy" />
+
+### Compile and run
+
+From the repository root:
+
+```bash
+cd examples/strategy
+javac --release 21 StrategyDemo.java
+java StrategyDemo
+```
+
+Or run the single-file source directly:
+
+```bash
+java StrategyDemo.java
+```
+
+Expected output:
+
+```text
+Cameo, GitLab, Windchill
+Windchill, Cameo, GitLab
+```
+
+## Extension exercise
+
+Add a case-insensitive ordering policy and explicitly define tie order. If the algorithm must preserve the input multiset, add contract tests ensuring custom strategies never drop or duplicate values. The current context checks nullability, not that stronger invariant.
+
+## Verification
+
+StrategyChecks.java verifies: Alphabetical order with duplicates, preserved supplied order, empty input, reverse lambda substitution, non-mutation of caller data, and invalid strategy input/output.
+
+```bash
+cd examples/strategy
+javac --release 21 StrategyDemo.java StrategyChecks.java
+java StrategyChecks
+```
+
+Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+
+## Tradeoffs and implementation limits
+
+| Concern | Design judgment |
+| --- | --- |
+| Composition | Algorithms vary without subclassing the context, but clients must select an appropriate one. |
+| Contract consistency | Strategies should agree on inputs, side effects, and result guarantees. |
+| Simple algorithms | A lambda may be clearer than a named class; an interface still documents the role. |
+
+Natural string ordering is case-sensitive and is not locale-aware collation. The context fixes its strategy at construction. Strategies are trusted to fulfill their algorithm contract; no runtime proof of permutation or optimality is attempted.
+
+## Compare related patterns
+
+| Approach | Distinction |
+| --- | --- |
+| State | Behavior follows lifecycle state and transitions; Strategy is selected as a policy. |
+| Template Method | Uses inheritance to vary algorithm steps; Strategy replaces a collaborator through composition. |
+
+<a href={path('patterns/state/')}> State guide →</a> · <a href={path('patterns/template-method/')}> Template Method guide →</a> · <a href={path('patterns/bridge/')}> Bridge guide →</a>
+
+## Quick reference
+
+- **Intent:** Make alternative algorithms interchangeable.
+- **Recognize it:** If one report class selects every sorting policy through growing conditionals, algorithm choices and report assembly become coupled.
+- **Key collaboration:** Alphabetical sorts by Java natural String ordering.
+- **Ask first:** Interchangeability is a behavioral promise, not just a matching method signature.
+
+## References
+
+- [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Strategy chapter.
+- [Oracle Java 21 — Comparator](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Comparator.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Refactoring.Guru — Strategy](https://refactoring.guru/design-patterns/strategy). Illustrated secondary explanation and comparisons.
+
+The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

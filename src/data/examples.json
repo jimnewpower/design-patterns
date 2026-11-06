@@ -1,0 +1,224 @@
+[
+  {
+    "slug": "abstract-factory",
+    "prefix": "AbstractFactory",
+    "smokeArgs": [
+      [
+        "text"
+      ],
+      [
+        "html"
+      ]
+    ],
+    "download": "examples",
+    "dynamicDownload": false
+  },
+  {
+    "slug": "builder",
+    "prefix": "Builder",
+    "smokeArgs": [
+      [
+        "text"
+      ],
+      [
+        "html"
+      ]
+    ],
+    "download": "downloads/BuilderDemo.java",
+    "dynamicDownload": false
+  },
+  {
+    "slug": "factory-method",
+    "prefix": "FactoryMethod",
+    "smokeArgs": [
+      [
+        "text"
+      ],
+      [
+        "html"
+      ]
+    ],
+    "download": "downloads/FactoryMethodDemo.java",
+    "dynamicDownload": false
+  },
+  {
+    "slug": "prototype",
+    "prefix": "Prototype",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/PrototypeDemo.java",
+    "dynamicDownload": false
+  },
+  {
+    "slug": "singleton",
+    "prefix": "Singleton",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/SingletonDemo.java",
+    "dynamicDownload": false
+  },
+  {
+    "slug": "adapter",
+    "prefix": "Adapter",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/AdapterDemo.java",
+    "dynamicDownload": false
+  },
+  {
+    "slug": "bridge",
+    "prefix": "Bridge",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/BridgeDemo.java",
+    "dynamicDownload": true
+  },
+  {
+    "slug": "composite",
+    "prefix": "Composite",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/CompositeDemo.java",
+    "dynamicDownload": true
+  },
+  {
+    "slug": "decorator",
+    "prefix": "Decorator",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/DecoratorDemo.java",
+    "dynamicDownload": true
+  },
+  {
+    "slug": "facade",
+    "prefix": "Facade",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/FacadeDemo.java",
+    "dynamicDownload": true
+  },
+  {
+    "slug": "flyweight",
+    "prefix": "Flyweight",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/FlyweightDemo.java",
+    "dynamicDownload": true
+  },
+  {
+    "slug": "proxy",
+    "prefix": "Proxy",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/ProxyDemo.java",
+    "dynamicDownload": true
+  },
+  {
+    "slug": "chain-of-responsibility",
+    "prefix": "ChainOfResponsibility",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/ChainOfResponsibilityDemo.java",
+    "dynamicDownload": true
+  },
+  {
+    "slug": "command",
+    "prefix": "Command",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/CommandDemo.java",
+    "dynamicDownload": true
+  },
+  {
+    "slug": "interpreter",
+    "prefix": "Interpreter",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/InterpreterDemo.java",
+    "dynamicDownload": true
+  },
+  {
+    "slug": "iterator",
+    "prefix": "Iterator",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/IteratorDemo.java",
+    "dynamicDownload": true
+  },
+  {
+    "slug": "mediator",
+    "prefix": "Mediator",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/MediatorDemo.java",
+    "dynamicDownload": true
+  },
+  {
+    "slug": "memento",
+    "prefix": "Memento",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/MementoDemo.java",
+    "dynamicDownload": true
+  },
+  {
+    "slug": "observer",
+    "prefix": "Observer",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/ObserverDemo.java",
+    "dynamicDownload": true
+  },
+  {
+    "slug": "state",
+    "prefix": "State",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/StateDemo.java",
+    "dynamicDownload": true
+  },
+  {
+    "slug": "strategy",
+    "prefix": "Strategy",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/StrategyDemo.java",
+    "dynamicDownload": true
+  },
+  {
+    "slug": "template-method",
+    "prefix": "TemplateMethod",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/TemplateMethodDemo.java",
+    "dynamicDownload": true
+  },
+  {
+    "slug": "visitor",
+    "prefix": "Visitor",
+    "smokeArgs": [
+      []
+    ],
+    "download": "downloads/VisitorDemo.java",
+    "dynamicDownload": true
+  }
+]

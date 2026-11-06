@@ -3,27 +3,149 @@ title: "Visitor"
 category: "Behavioral"
 order: 23
 intent: "Add operations to an object structure without putting each operation in its classes."
-keywords: ["operations", "dispatch"]
-status: "planned"
-related: ["composite"]
+keywords: ["operations", "dispatch", "visitor", "example", "Java"]
+status: "complete"
+related: ["composite", "iterator", "interpreter"]
 ---
 
-> This guide is planned. The intent below is available now; the implementation walkthrough is still to come.
+import SourceListing from '../../components/SourceListing.astro';
+import PatternDiagram from '../../components/PatternDiagram.astro';
+import RuntimeSteps from '../../components/RuntimeSteps.astro';
+import { path } from '../../data/navigation';
 
-## Intent
+## The idea in plain English
 
-Add operations to an object structure without putting each operation in its classes.
+Visitor adds operations to a stable object structure by dispatching an operation to the concrete element type. Parts and assemblies accept a visitor; a mass visitor totals grams while an outline visitor prints names. The element classes do not contain those operations.
 
-## Guide outline
+> Use Visitor when operations change more frequently than element types, and state who owns traversal.
 
-- The problem and a plain-English explanation
-- At least three practical use cases
-- Pattern roles and a UML class diagram
-- A step-by-step Java 21 implementation
-- Runtime sequence and expected output
-- An extension exercise and behavior checks
-- Tradeoffs, alternatives, and reference links
+## The problem before the pattern
 
-## Related patterns
+A stable part tree may need mass, cost, export, and validation operations. Adding every operation directly to each element bloats the model. A visitor keeps one operation together across element types, provided those types are relatively stable.
 
-- [Composite](../composite/)
+## Practical use cases
+
+1. Multiple analyses over a stable engineering model.
+2. AST printing, checking, or code generation.
+3. Exports of a fixed document element hierarchy.
+4. Aggregation over stable leaf/composite structures.
+
+## Structure and pattern roles
+
+<PatternDiagram {...{"id": "visitor-roles", "title": "Visitor role relationships", "description": "Item: Element interface; Visitor<R>: Visitor interface; Part / Assembly: Concrete elements; MassVisitor: Concrete visitor. Use Visitor when operations change more frequently than element types, and state who owns traversal.", "nodes": [{"title": "Item", "role": "Element interface", "detail": "accept(visitor)"}, {"title": "Visitor<R>", "role": "Visitor interface", "detail": "visitPart, visitAssembly"}, {"title": "Part / Assembly", "role": "Concrete elements", "detail": "dispatch to typed visit methods"}, {"title": "MassVisitor", "role": "Concrete visitor", "detail": "recursive mass aggregation"}], "edges": [{"to": 1, "label": "accepts", "relation": "uses", "from": 0}, {"to": 0, "label": "implements", "relation": "implements", "from": 2}, {"to": 1, "label": "implements", "relation": "implements", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+
+| Role | Java types | Responsibility |
+| --- | --- | --- |
+| Element | Item | Declares generic visitor acceptance. |
+| Concrete elements | Part, Assembly | Call the matching typed visit method. |
+| Visitor | `Visitor<R>` | Declares an operation for each element type. |
+| Concrete visitors | MassVisitor, OutlineVisitor | Implement analyses; the assembly visit chooses recursion. |
+
+## Java walkthrough
+
+### 1. Keep element structure stable
+
+Part and Assembly are immutable records behind a sealed Item interface.
+
+### 2. Perform double dispatch
+
+accept calls visitPart(this) or visitAssembly(this). Runtime element dispatch chooses the accept body; visitor dispatch chooses the operation implementation.
+
+### 3. Put an operation together
+
+MassVisitor handles leaves and groups in one class, using exact addition to reject overflow.
+
+### 4. Choose traversal ownership
+
+Visitors recurse into assembly children themselves. OutlineVisitor selects its own formatting, and a test-only count visitor adds an operation without changing elements.
+
+The key collaboration is visible here (imports and surrounding types are in the complete listing):
+
+```java
+public <R> R accept(Visitor<R> visitor) { return visitor.visitPart(this); }
+```
+
+## Runtime sequence
+
+<RuntimeSteps id="visitor-runtime" title="One concrete execution trace" steps={[{"label": "Accept mass visitor", "detail": "Client asks the root assembly to accept MassVisitor."}, {"label": "Typed group dispatch", "detail": "Assembly invokes visitAssembly on that visitor."}, {"label": "Visit children", "detail": "Visitor recursively accepts each child and sums results."}, {"label": "Return analysis", "detail": "The Sensor root returns 130 grams."}]} />
+
+## Complete runnable example
+
+This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+
+<a href={path('downloads/VisitorDemo.java')} download="VisitorDemo.java">Download VisitorDemo.java ↓</a>
+
+<SourceListing slug="visitor" prefix="Visitor" />
+
+### Compile and run
+
+From the repository root:
+
+```bash
+cd examples/visitor
+javac --release 21 VisitorDemo.java
+java VisitorDemo
+```
+
+Or run the single-file source directly:
+
+```bash
+java VisitorDemo.java
+```
+
+Expected output:
+
+```text
+Mass: 130 g
+Sensor[Housing, Board]
+```
+
+## Extension exercise
+
+Add a CostVisitor using a supplied part-price map and explicit missing-price errors. Then add a new element type and observe that every visitor must implement its method. That contrast is the pattern’s central tradeoff, not a defect to hide with default empty implementations.
+
+## Verification
+
+VisitorChecks.java verifies: Leaf and nested aggregates, outline traversal order, empty assemblies, a new count operation, invalid mass/input, and arithmetic overflow.
+
+```bash
+cd examples/visitor
+javac --release 21 VisitorDemo.java VisitorChecks.java
+java VisitorChecks
+```
+
+Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+
+## Tradeoffs and implementation limits
+
+| Concern | Design judgment |
+| --- | --- |
+| New operations | Add a visitor without editing the existing elements. |
+| New element types | Change the visitor interface and update every operation. |
+| Encapsulation | Visitors need enough element data to work; avoid exposing unrelated mutable internals. |
+
+The model is an immutable tree with integral grams. Visitors perform recursive traversal, so deep or cyclic graphs need another policy. Visitor methods intentionally know concrete element types. This is not a general traversal API for unknown types loaded at runtime.
+
+## Compare related patterns
+
+| Approach | Distinction |
+| --- | --- |
+| Composite | Models the tree; Visitor adds operations over its element types. |
+| Iterator | Exposes traversal to a caller; Visitor dispatches by element type and can own recursion. |
+
+<a href={path('patterns/composite/')}> Composite guide →</a> · <a href={path('patterns/iterator/')}> Iterator guide →</a> · <a href={path('patterns/interpreter/')}> Interpreter guide →</a>
+
+## Quick reference
+
+- **Intent:** Add operations to an object structure without putting each operation in its classes.
+- **Recognize it:** A stable part tree may need mass, cost, export, and validation operations.
+- **Key collaboration:** accept calls visitPart(this) or visitAssembly(this).
+- **Ask first:** Use Visitor when operations change more frequently than element types, and state who owns traversal.
+
+## References
+
+- [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Visitor chapter.
+- [Oracle Java 21 — FileVisitor](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/nio/file/FileVisitor.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Refactoring.Guru — Visitor](https://refactoring.guru/design-patterns/visitor). Illustrated secondary explanation and comparisons.
+
+The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

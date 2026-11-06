@@ -1,0 +1,9 @@
+---
+import { Code } from 'astro:components';
+interface Props { slug: string; prefix: string }
+const { slug, prefix } = Astro.props;
+const sources = import.meta.glob<string>('../../examples/*/*Demo.java', { query: '?raw', import: 'default', eager: true });
+const source = sources[`../../examples/${slug}/${prefix}Demo.java`];
+if (!source) throw new Error(`Missing Java source: ${slug}/${prefix}Demo.java`);
+---
+<Code code={source} lang="java" themes={{light:'github-light',dark:'github-dark'}} />

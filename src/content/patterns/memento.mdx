@@ -2,28 +2,149 @@
 title: "Memento"
 category: "Behavioral"
 order: 18
-intent: "Capture and restore an object’s state without exposing its internals."
-keywords: ["snapshot", "restore", "undo"]
-status: "planned"
-related: ["command"]
+intent: "Capture and restore an object\u2019s state without exposing its internals."
+keywords: ["snapshot", "restore", "undo", "memento", "example", "Java"]
+status: "complete"
+related: ["command", "prototype", "state"]
 ---
 
-> This guide is planned. The intent below is available now; the implementation walkthrough is still to come.
+import SourceListing from '../../components/SourceListing.astro';
+import PatternDiagram from '../../components/PatternDiagram.astro';
+import RuntimeSteps from '../../components/RuntimeSteps.astro';
+import { path } from '../../data/navigation';
 
-## Intent
+## The idea in plain English
 
-Capture and restore an object’s state without exposing its internals.
+Memento captures an object’s state so that the same object can later restore it without exposing its representation to the caretaker. An editor saves title and tool data in a snapshot; history stores that opaque snapshot and requests restoration on undo.
 
-## Guide outline
+> A memento is meaningful only if it captures a consistent state and clearly belongs to an originator and lifetime.
 
-- The problem and a plain-English explanation
-- At least three practical use cases
-- Pattern roles and a UML class diagram
-- A step-by-step Java 21 implementation
-- Runtime sequence and expected output
-- An extension exercise and behavior checks
-- Tradeoffs, alternatives, and reference links
+## The problem before the pattern
 
-## Related patterns
+If history reads and writes all editor fields directly, it becomes coupled to internal representation and can restore only part of the state. A snapshot owned by the editor centralizes what constitutes a consistent saved state.
 
-- [Command](../command/)
+## Practical use cases
+
+1. Editor checkpoints and undo.
+2. Restoring a configuration after a canceled edit.
+3. Pausing a simulation configuration before speculative changes.
+4. In-memory recovery points in a transactional interaction.
+
+## Structure and pattern roles
+
+<PatternDiagram {...{"id": "memento-roles", "title": "Memento role relationships", "description": "Editor: Originator; Editor.Snapshot: Memento; History: Caretaker; Client: Consumer role. A memento is meaningful only if it captures a consistent state and clearly belongs to an originator and lifetime.", "nodes": [{"title": "Editor", "role": "Originator", "detail": "save(), restore(snapshot)"}, {"title": "Editor.Snapshot", "role": "Memento", "detail": "private saved state and owner"}, {"title": "History", "role": "Caretaker", "detail": "checkpoint(), undo()"}, {"title": "Client", "role": "Consumer role", "detail": "edits and checkpoints"}], "edges": [{"to": 1, "label": "creates / restores", "relation": "uses", "from": 0}, {"to": 0, "label": "requests restore", "relation": "uses", "from": 2}, {"to": 2, "label": "uses history", "relation": "uses", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+
+| Role | Java types | Responsibility |
+| --- | --- | --- |
+| Originator | Editor | Defines and restores its own state. |
+| Memento | Editor.Snapshot | Stores private immutable title/list values and owner identity. |
+| Caretaker | History | Retains snapshots without inspecting their contents. |
+| Client | main | Chooses checkpoint boundaries around edits. |
+
+## Java walkthrough
+
+### 1. Validate before assignment
+
+Editor.set validates title and copies tools before changing either field, avoiding partial state on a failed edit.
+
+### 2. Capture a snapshot
+
+save creates an immutable Snapshot tied to that editor. Immutable strings and the copied list keep saved data stable.
+
+### 3. Store opaque history
+
+History keeps snapshots in a stack. Its code never reads the saved title or list.
+
+### 4. Restore owned state
+
+restore rejects snapshots from another editor. History pops only after restore succeeds.
+
+The key collaboration is visible here (imports and surrounding types are in the complete listing):
+
+```java
+editor.restore(snapshots.peek()); snapshots.pop(); return true;
+```
+
+## Runtime sequence
+
+<RuntimeSteps id="memento-runtime" title="One concrete execution trace" steps={[{"label": "Edit baseline", "detail": "Editor contains Draft and Cameo."}, {"label": "Checkpoint", "detail": "History asks Editor to save an opaque snapshot."}, {"label": "Make changes", "detail": "Editor now contains Revised with an extra tool."}, {"label": "Undo", "detail": "Editor restores its snapshot; history removes that checkpoint."}]} />
+
+## Complete runnable example
+
+This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+
+<a href={path('downloads/MementoDemo.java')} download="MementoDemo.java">Download MementoDemo.java ↓</a>
+
+<SourceListing slug="memento" prefix="Memento" />
+
+### Compile and run
+
+From the repository root:
+
+```bash
+cd examples/memento
+javac --release 21 MementoDemo.java
+java MementoDemo
+```
+
+Or run the single-file source directly:
+
+```bash
+java MementoDemo.java
+```
+
+Expected output:
+
+```text
+Draft: Cameo
+```
+
+## Extension exercise
+
+Add redo and a bounded history policy. Estimate storage when snapshots include large structures, and consider immutable structural sharing before copying large graphs. Add a new editor field and test that restoration includes it rather than silently omitting it.
+
+## Verification
+
+MementoChecks.java verifies: Multiple checkpoints in LIFO order, empty history, input snapshot isolation, repeatable restore, rejection of another editor’s snapshot, and failed edits preserving current state.
+
+```bash
+cd examples/memento
+javac --release 21 MementoDemo.java MementoChecks.java
+java MementoChecks
+```
+
+Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+
+## Tradeoffs and implementation limits
+
+| Concern | Design judgment |
+| --- | --- |
+| Encapsulation | Originator owns snapshot content, reducing caretaker coupling. |
+| Memory | Whole-state history can grow without bound; define retention. |
+| Consistency | Mutable nested fields need copying or immutable ownership, not just a new outer snapshot object. |
+
+Snapshots are in-memory and keep an owner reference; they are not a durable or versioned serialization format. All types are nested for a single-file demo; the caretaker respects the opaque API by convention. There is no concurrency or external-resource restoration. A checkpoint is made before an edit and undone by restoring that checkpoint.
+
+## Compare related patterns
+
+| Approach | Distinction |
+| --- | --- |
+| Command | Stores actions and their execution context; Memento stores recoverable state. Commands can use mementos for undo. |
+| Prototype | Creates a new domain object from an existing one; Memento primarily restores an originator. |
+
+<a href={path('patterns/command/')}> Command guide →</a> · <a href={path('patterns/prototype/')}> Prototype guide →</a> · <a href={path('patterns/state/')}> State guide →</a>
+
+## Quick reference
+
+- **Intent:** Capture and restore an object’s state without exposing its internals.
+- **Recognize it:** If history reads and writes all editor fields directly, it becomes coupled to internal representation and can restore only part of the state.
+- **Key collaboration:** save creates an immutable Snapshot tied to that editor.
+- **Ask first:** A memento is meaningful only if it captures a consistent state and clearly belongs to an originator and lifetime.
+
+## References
+
+- [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Memento chapter.
+- [Oracle Java 21 — List.copyOf](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/List.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Refactoring.Guru — Memento](https://refactoring.guru/design-patterns/memento). Illustrated secondary explanation and comparisons.
+
+The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

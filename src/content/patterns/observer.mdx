@@ -3,27 +3,148 @@ title: "Observer"
 category: "Behavioral"
 order: 19
 intent: "Notify interested objects when something changes."
-keywords: ["notifications", "events", "subscribe"]
-status: "planned"
-related: ["mediator"]
+keywords: ["notifications", "events", "subscribe", "observer", "example", "Java"]
+status: "complete"
+related: ["mediator", "command", "proxy"]
 ---
 
-> This guide is planned. The intent below is available now; the implementation walkthrough is still to come.
+import SourceListing from '../../components/SourceListing.astro';
+import PatternDiagram from '../../components/PatternDiagram.astro';
+import RuntimeSteps from '../../components/RuntimeSteps.astro';
+import { path } from '../../data/navigation';
 
-## Intent
+## The idea in plain English
 
-Notify interested objects when something changes.
+Observer lets interested objects subscribe to changes without the publisher knowing their concrete classes. A release event publisher holds listeners; when a report is released, it delivers the event to the current subscribers.
 
-## Guide outline
+> Subscription lifecycle and delivery semantics define the useful contract; a list of callbacks alone leaves too much unspecified.
 
-- The problem and a plain-English explanation
-- At least three practical use cases
-- Pattern roles and a UML class diagram
-- A step-by-step Java 21 implementation
-- Runtime sequence and expected output
-- An extension exercise and behavior checks
-- Tradeoffs, alternatives, and reference links
+## The problem before the pattern
 
-## Related patterns
+Calling every concrete notification consumer from the release publisher couples it to dashboards, audit views, and other optional behavior. Subscriptions let those consumers join and leave without changing the publisher.
 
-- [Mediator](../mediator/)
+## Practical use cases
+
+1. UI views updating after model changes.
+2. In-process release or configuration notifications.
+3. Optional audit or metrics listeners.
+4. Decoupled reactions to domain events within one process.
+
+## Structure and pattern roles
+
+<PatternDiagram {...{"id": "observer-roles", "title": "Observer role relationships", "description": "ReleaseEvents: Subject; Consumer<String>: Observer contract; Subscription: Lifecycle handle; Listener lambda: Concrete observer. Subscription lifecycle and delivery semantics define the useful contract; a list of callbacks alone leaves too much unspecified.", "nodes": [{"title": "ReleaseEvents", "role": "Subject", "detail": "subscribe(listener), publish(name)"}, {"title": "Consumer<String>", "role": "Observer contract", "detail": "accept(event)"}, {"title": "Subscription", "role": "Lifecycle handle", "detail": "close() unsubscribes"}, {"title": "Listener lambda", "role": "Concrete observer", "detail": "prints release event"}], "edges": [{"to": 1, "label": "notifies", "relation": "uses", "from": 0}, {"to": 2, "label": "returns handle", "relation": "uses", "from": 0}, {"to": 1, "label": "implements", "relation": "implements", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+
+| Role | Java types | Responsibility |
+| --- | --- | --- |
+| Subject | ReleaseEvents | Stores listeners and publishes release names. |
+| Observer | Consumer of String | Receives one synchronous event. |
+| Concrete observer | Listener lambda in main | Performs a reaction to an event. |
+| Subscription handle | Subscription | Supports explicit, idempotent unsubscription. |
+
+## Java walkthrough
+
+### 1. Register listeners
+
+subscribe validates a listener and gives each registration a unique token. Repeated registrations are independent subscriptions.
+
+### 2. Return lifecycle control
+
+Closing the handle removes its token. Closing it twice is safe; try-with-resources scopes the listener lifetime.
+
+### 3. Snapshot recipients
+
+publish copies current listener values before invoking callbacks. Membership changes during delivery apply to the next event.
+
+### 4. Deliver synchronously
+
+Callbacks run in registration order on the publisher thread. The first thrown exception stops later delivery and propagates.
+
+The key collaboration is visible here (imports and surrounding types are in the complete listing):
+
+```java
+for (Consumer<String> listener : List.copyOf(listeners.values())) listener.accept(name);
+```
+
+## Runtime sequence
+
+<RuntimeSteps id="observer-runtime" title="One concrete execution trace" steps={[{"label": "Subscribe", "detail": "Client registers a release-printing callback."}, {"label": "Publish", "detail": "Subject snapshots current listeners for Engineering Tools."}, {"label": "Notify", "detail": "Callback prints the release name synchronously."}, {"label": "Unsubscribe", "detail": "Scope closes its handle; later events have no listener."}]} />
+
+## Complete runnable example
+
+This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+
+<a href={path('downloads/ObserverDemo.java')} download="ObserverDemo.java">Download ObserverDemo.java ↓</a>
+
+<SourceListing slug="observer" prefix="Observer" />
+
+### Compile and run
+
+From the repository root:
+
+```bash
+cd examples/observer
+javac --release 21 ObserverDemo.java
+java ObserverDemo
+```
+
+Or run the single-file source directly:
+
+```bash
+java ObserverDemo.java
+```
+
+Expected output:
+
+```text
+Released: Engineering Tools
+```
+
+## Extension exercise
+
+Change exception handling to attempt every listener and aggregate failures. Write tests proving the chosen delivery guarantee. For asynchronous delivery, define executor ownership, ordering, queue bounds, and shutdown before replacing direct calls with background tasks.
+
+## Verification
+
+ObserverChecks.java verifies: Registration order, unsubscribe and double-close, no-listener publication, changes during snapshot delivery, fail-fast listener exceptions, and null listeners/events.
+
+```bash
+cd examples/observer
+javac --release 21 ObserverDemo.java ObserverChecks.java
+java ObserverChecks
+```
+
+Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+
+## Tradeoffs and implementation limits
+
+| Concern | Design judgment |
+| --- | --- |
+| Decoupling | Publisher does not know concrete consumers but delivery can be harder to trace. |
+| Lifecycle | Unsubscribe reliably to prevent retained listener graphs. |
+| Delivery contract | Ordering, exceptions, reentrancy, and thread choice are part of the API. |
+
+This subject is single-threaded and synchronous. It provides no persistence, retry, exactly-once delivery, backpressure, or cross-process messaging. Listeners are strongly retained until removed. Reentrant publication is not blocked and can recurse; define a policy if callbacks can publish again.
+
+## Compare related patterns
+
+| Approach | Distinction |
+| --- | --- |
+| Mediator | Coordinates relationships and policies among peers; Observer distributes notifications. |
+| Command | Encapsulates a request to perform an action; an event describes something for subscribers to react to. |
+
+<a href={path('patterns/mediator/')}> Mediator guide →</a> · <a href={path('patterns/command/')}> Command guide →</a> · <a href={path('patterns/proxy/')}> Proxy guide →</a>
+
+## Quick reference
+
+- **Intent:** Notify interested objects when something changes.
+- **Recognize it:** Calling every concrete notification consumer from the release publisher couples it to dashboards, audit views, and other optional behavior.
+- **Key collaboration:** Closing the handle removes its token.
+- **Ask first:** Subscription lifecycle and delivery semantics define the useful contract; a list of callbacks alone leaves too much unspecified.
+
+## References
+
+- [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Observer chapter.
+- [Oracle Java 21 — Consumer](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/function/Consumer.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Refactoring.Guru — Observer](https://refactoring.guru/design-patterns/observer). Illustrated secondary explanation and comparisons.
+
+The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

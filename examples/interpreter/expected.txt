@@ -1,0 +1,2 @@
+Approved item: true
+Obsolete item: false
