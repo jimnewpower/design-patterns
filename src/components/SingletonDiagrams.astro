@@ -1,0 +1,21 @@
+---
+interface Props { kind: 'structure' | 'runtime' }
+const { kind } = Astro.props;
+---
+<figure>
+{kind === 'structure' ? <svg viewBox="0 0 700 350" role="img" aria-labelledby="single-class-title single-class-desc">
+<title id="single-class-title">Singleton with an injected consumer interface</title><desc id="single-class-desc">Startup supplies ReportFormats.INSTANCE to ReportNamer. ReportNamer uses FormatCatalog, implemented by the one-constant ReportFormats enum. The enum owns an immutable extension map.</desc>
+<defs><marker id="single-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10" fill="none" stroke="currentColor"/></marker><marker id="single-realize" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="10" markerHeight="10" orient="auto"><path d="M1 1 L11 6 L1 11 Z" fill="var(--surface)" stroke="currentColor"/></marker></defs>
+<g class="edges"><path d="M190 65 H270" marker-end="url(#single-arrow)"/><path d="M470 65 H525" marker-end="url(#single-arrow)"/><path d="M600 210 V115" stroke-dasharray="5 4" marker-end="url(#single-realize)"/><path d="M110 105 V260 H460" marker-end="url(#single-arrow)"/></g>
+<g class="nodes"><rect x="20" y="25" width="170" height="80"/><rect x="270" y="25" width="200" height="80"/><rect x="525" y="15" width="165" height="100"/><rect x="460" y="210" width="230" height="100"/></g>
+<g class="labels"><text x="105" y="57">Startup / main</text><text x="105" y="82">selects lifetime</text><text x="370" y="57">ReportNamer</text><text x="370" y="82">fileName(base, format)</text><text x="607" y="42">«interface»</text><text x="607" y="68">FormatCatalog</text><text x="607" y="94">extensionFor(format)</text><text x="575" y="237">«enum» ReportFormats</text><text x="575" y="263">INSTANCE</text><text x="575" y="289">immutable map</text><text x="230" y="50" class="annotation">injects</text><text x="497" y="50" class="annotation">uses</text><text x="290" y="245" class="annotation">obtains INSTANCE</text><text x="350" y="340" class="annotation">Hollow triangle: implements the interface.</text></g>
+</svg> : <svg viewBox="0 0 700 350" role="img" aria-labelledby="single-runtime-title single-runtime-desc">
+<title id="single-runtime-title">Concurrent access within one defining class loader</title><desc id="single-runtime-desc">Worker A and worker B access the same ReportFormats class. Java class initialization coordinates creation and publication of INSTANCE. Both workers receive the same enum constant. A separate defining class loader has a separate class identity.</desc>
+<defs><marker id="single-runtime-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10" fill="none" stroke="currentColor"/></marker></defs>
+<g class="nodes"><rect x="20" y="30" width="170" height="60"/><rect x="20" y="170" width="170" height="60"/><rect x="300" y="60" width="370" height="150"/></g>
+<g class="edges" marker-end="url(#single-runtime-arrow)"><path d="M190 60 H250 V100 H300"/><path d="M190 200 H250 V170 H300"/></g>
+<g class="labels"><text x="105" y="65">Worker A</text><text x="105" y="205">Worker B</text><text x="485" y="95">Same defining class loader</text><text x="485" y="131">ReportFormats.INSTANCE</text><text x="485" y="172">One initialized, safely published constant</text><text x="350" y="280">Class initialization coordinates concurrent first use.</text><text x="350" y="310" class="annotation">Separate class identities or JVMs are separate scopes.</text></g>
+</svg>}
+<figcaption>{kind === 'structure' ? 'Global access stays at startup; the consumer receives an explicit dependency that tests can replace.' : 'Safe instance publication does not make later mutable fields or multi-step operations thread-safe.'}</figcaption>
+</figure>
+<style>figure{margin:28px 0;overflow-x:auto}svg{display:block;width:100%;height:auto;min-width:560px;padding:10px;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:8px}.edges{fill:none;stroke:currentColor;stroke-width:1.5}.nodes rect{fill:var(--soft);stroke:var(--line);rx:5}.labels{text-anchor:middle;fill:var(--ink);font:13px system-ui,sans-serif}.annotation{fill:var(--muted);font-size:12px}figcaption{font-size:.8rem;color:var(--muted);margin-top:9px}@media print{svg{min-width:0}}</style>
