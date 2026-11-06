@@ -8,7 +8,8 @@ A searchable field guide to all 23 Gang of Four design patterns, with Java examp
 - Field Guide layout with category navigation, table of contents, adjacent patterns, and print styles.
 - Complete Abstract Factory guide: problem, four use cases, class/sequence diagrams, Java walkthrough, runnable source, Markdown extension, verification, tradeoffs, and references.
 - Complete Builder guide: GoF builder/director roles, fluent Java idiom, two representations, diagrams, lifecycle rules, extension exercise, and behavior checks.
-- Clearly labeled outlines for the other 21 guides.
+- Complete Factory Method guide: creator/product roles, an inherited export workflow, overridable creation hooks, diagrams, comparisons, extension exercise, and behavior checks.
+- Clearly labeled outlines for the other 20 guides.
 - Full-text Pagefind search and a persistent light/dark toggle (light by default).
 
 ## Development
@@ -53,7 +54,19 @@ java BuilderDemo text
 java BuilderDemo html
 ```
 
-The Builder listing and download use `examples/builder/BuilderDemo.java` directly. CI runs both patterns in a Java 21 matrix.
+The Builder listing and download use `examples/builder/BuilderDemo.java` directly. CI runs all three completed patterns in a Java 21 matrix.
+
+Factory Method checks:
+
+```sh
+cd examples/factory-method
+javac --release 21 FactoryMethodDemo.java FactoryMethodChecks.java
+java FactoryMethodChecks
+java FactoryMethodDemo text
+java FactoryMethodDemo html
+```
+
+The Factory Method listing and download use `examples/factory-method/FactoryMethodDemo.java` directly.
 
 ## Content
 

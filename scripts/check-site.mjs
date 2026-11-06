@@ -13,7 +13,7 @@ const builderGuide = await readFile('dist/patterns/builder/index.html','utf8');
 assert.ok(builderGuide.includes('Complete guide') && !builderGuide.includes('This guide is planned'));
 assert.ok(builderGuide.includes('TextReportBuilder') && builderGuide.includes('Runtime sequence') && builderGuide.includes('<svg'));
 const home = await readFile('dist/index.html','utf8');
-assert.ok(home.includes('2 complete guides'), 'Homepage reflects completed guides');
+assert.ok(home.includes('3 complete guides'), 'Homepage reflects completed guides');
 for(const slug of patternDirs) assert.ok(home.includes(`patterns/${slug}/`),`Homepage links ${slug}`);
 let count=0;
 async function scan(dir) {
@@ -43,3 +43,9 @@ assert.ok(guide.includes('HtmlReportFactory') && guide.includes('Complete runnab
 assert.ok(guide.includes('<svg') && guide.includes('Runtime sequence'));
 assert.ok((await readdir('dist/pagefind')).includes('pagefind.js'),'Search bundle generated');
 console.log(`Verified ${count} HTML pages, 23 pattern links, local assets, source download, and search bundle.`);
+
+const factorySource = await readFile('examples/factory-method/FactoryMethodDemo.java','utf8');
+assert.equal(await readFile('dist/downloads/FactoryMethodDemo.java','utf8'), factorySource, 'Factory Method download matches tested source');
+const factoryGuide = await readFile('dist/patterns/factory-method/index.html','utf8');
+assert.ok(factoryGuide.includes('Complete guide') && !factoryGuide.includes('This guide is planned'));
+assert.ok(factoryGuide.includes('createFormatter') && factoryGuide.includes('Runtime sequence') && factoryGuide.includes('<svg'));
