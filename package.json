@@ -1,0 +1,38 @@
+{
+  "name": "design-patterns",
+  "version": "1.0.0",
+  "description": "Pattern Atlas: a Java field guide to the Gang of Four design patterns",
+  "scripts": {
+    "dev": "astro dev --host 0.0.0.0",
+    "check": "astro check",
+    "build": "astro build && pagefind --site dist",
+    "preview": "astro preview --host 0.0.0.0",
+    "test": "node scripts/check-site.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jimnewpower/design-patterns.git"
+  },
+  "keywords": [],
+  "author": "",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/jimnewpower/design-patterns/issues"
+  },
+  "homepage": "https://github.com/jimnewpower/design-patterns#readme",
+  "dependencies": {
+    "@astrojs/mdx": "^8.1.3",
+    "@pagefind/default-ui": "^1.6.0",
+    "astro": "^7.4.7",
+    "pagefind": "^1.6.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "typescript": "^6.0.3"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

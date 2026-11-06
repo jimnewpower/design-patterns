@@ -1,0 +1,39 @@
+name: Verify Pattern Atlas
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+      - run: npm test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pattern-atlas-site
+          path: dist
+  java:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Compile and check the example
+        working-directory: examples/abstract-factory
+        run: |
+          javac --release 21 AbstractFactoryDemo.java AbstractFactoryChecks.java
+          java AbstractFactoryChecks
+          java AbstractFactoryDemo text
+          java AbstractFactoryDemo html
