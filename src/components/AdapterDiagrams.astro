@@ -1,0 +1,22 @@
+---
+interface Props { kind: 'structure' | 'sequence' }
+const { kind } = Astro.props;
+---
+<figure>
+{kind === 'structure' ? <svg viewBox="0 0 700 330" role="img" aria-labelledby="adapter-class-title adapter-class-desc">
+<title id="adapter-class-title">Object Adapter class structure</title><desc id="adapter-class-desc">ClearanceCheck depends on PartLengthSource. CadLengthAdapter implements that target and holds a LegacyCadClient, translating its lookupPart result from inches into millimeters.</desc>
+<defs><marker id="adapter-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10" fill="none" stroke="currentColor"/></marker><marker id="adapter-realize" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="10" markerHeight="10" orient="auto"><path d="M1 1 L11 6 L1 11 Z" fill="var(--surface)" stroke="currentColor"/></marker></defs>
+<g class="edges"><path d="M220 65 H390" marker-end="url(#adapter-arrow)"/><path d="M535 205 V105" stroke-dasharray="5 4" marker-end="url(#adapter-realize)"/><path d="M390 245 H250" marker-end="url(#adapter-arrow)"/></g>
+<g class="nodes"><rect x="20" y="25" width="200" height="80"/><rect x="390" y="15" width="290" height="90"/><rect x="390" y="205" width="290" height="90"/><rect x="20" y="205" width="230" height="90"/></g>
+<g class="labels"><text x="120" y="55">ClearanceCheck</text><text x="120" y="80">Client</text><text x="535" y="40">«interface» PartLengthSource</text><text x="535" y="67">lengthMillimeters(partId)</text><text x="535" y="90">Target</text><text x="535" y="235">CadLengthAdapter</text><text x="535" y="262">inches × 25.4 → millimeters</text><text x="135" y="235">LegacyCadClient</text><text x="135" y="262">lookupPart(number): LegacyPart</text><text x="300" y="50" class="annotation">uses</text><text x="320" y="230" class="annotation">wraps</text><text x="350" y="322" class="annotation">Hollow triangle: implements the target interface.</text></g>
+</svg> : <svg viewBox="0 0 700 420" role="img" aria-labelledby="adapter-seq-title adapter-seq-desc">
+<title id="adapter-seq-title">Translating an existing CAD lookup</title><desc id="adapter-seq-desc">ClearanceCheck calls lengthMillimeters on the adapter. The adapter calls lookupPart on the legacy client, extracts 2.5 inches, converts to 63.50 millimeters, and returns the adapted value for the limit comparison.</desc>
+<defs><marker id="adapter-seq-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10" fill="none" stroke="currentColor"/></marker></defs>
+<g class="nodes"><rect x="10" y="10" width="180" height="45"/><rect x="245" y="10" width="210" height="45"/><rect x="510" y="10" width="180" height="45"/></g>
+<g class="edges" stroke-dasharray="4 5"><path d="M100 55 V400"/><path d="M350 55 V400"/><path d="M600 55 V400"/></g>
+<g class="edges" marker-end="url(#adapter-seq-arrow)"><path d="M100 110 H350"/><path d="M350 175 H600"/><path d="M600 235 H350" stroke-dasharray="5 4"/><path d="M350 335 H100" stroke-dasharray="5 4"/></g>
+<g class="labels"><text x="100" y="38">ClearanceCheck</text><text x="350" y="38">CadLengthAdapter</text><text x="600" y="38">LegacyCadClient</text><text x="225" y="95">lengthMillimeters(partId)</text><text x="475" y="160">lookupPart(partId)</text><text x="475" y="220">LegacyPart: 2.5 inches</text><text x="485" y="285">convert: 2.5 × 25.4</text><text x="225" y="320">63.50 millimeters</text><text x="205" y="385">compare against 70 mm limit</text></g>
+</svg>}
+<figcaption>{kind === 'structure' ? 'Composition adapts an existing API without changing its class or the consuming client.' : 'The adapter translates units and result shape. The client retains the clearance decision. Dashed arrows indicate returns.'}</figcaption>
+</figure>
+<style>figure{margin:28px 0;overflow-x:auto}svg{display:block;width:100%;height:auto;min-width:560px;padding:10px;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:8px}.edges{fill:none;stroke:currentColor;stroke-width:1.5}.nodes rect{fill:var(--soft);stroke:var(--line);rx:5}.labels{text-anchor:middle;fill:var(--ink);font:13px system-ui,sans-serif}.annotation{fill:var(--muted);font-size:12px}figcaption{font-size:.8rem;color:var(--muted);margin-top:9px}@media print{svg{min-width:0}}</style>

@@ -11,7 +11,8 @@ A searchable field guide to all 23 Gang of Four design patterns, with Java examp
 - Complete Factory Method guide: creator/product roles, an inherited export workflow, overridable creation hooks, diagrams, comparisons, extension exercise, and behavior checks.
 - Complete Prototype guide: explicit copy contracts, nested mutable-state isolation, a named registry, diagrams, clone comparisons, and behavior checks.
 - Complete Singleton guide: enum implementation, explicit scope, immutable state, dependency injection, concurrency checks, and alternatives.
-- Clearly labeled outlines for the other 18 guides.
+- Complete Adapter guide: a simulated CAD API boundary, exact unit conversion, error translation, diagrams, contract checks, and related-wrapper comparisons.
+- Clearly labeled outlines for the other 17 guides.
 - Full-text Pagefind search and a persistent light/dark toggle (light by default).
 
 ## Development
@@ -56,7 +57,7 @@ java BuilderDemo text
 java BuilderDemo html
 ```
 
-The Builder listing and download use `examples/builder/BuilderDemo.java` directly. CI runs all five completed patterns in a Java 21 matrix.
+The Builder listing and download use `examples/builder/BuilderDemo.java` directly. CI runs all six completed patterns in a Java 21 matrix.
 
 Factory Method checks:
 
@@ -91,6 +92,17 @@ java SingletonDemo
 ```
 
 The Singleton listing and download use `examples/singleton/SingletonDemo.java` directly.
+
+Adapter checks:
+
+```sh
+cd examples/adapter
+javac --release 21 AdapterDemo.java AdapterChecks.java
+java AdapterChecks
+java AdapterDemo
+```
+
+The Adapter listing and download use `examples/adapter/AdapterDemo.java` directly. The legacy CAD client is an in-memory stand-in, not a vendor integration.
 
 ## Content
 
