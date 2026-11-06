@@ -13,7 +13,7 @@ const builderGuide = await readFile('dist/patterns/builder/index.html','utf8');
 assert.ok(builderGuide.includes('Complete guide') && !builderGuide.includes('This guide is planned'));
 assert.ok(builderGuide.includes('TextReportBuilder') && builderGuide.includes('Runtime sequence') && builderGuide.includes('<svg'));
 const home = await readFile('dist/index.html','utf8');
-assert.ok(home.includes('4 complete guides'), 'Homepage reflects completed guides');
+assert.ok(home.includes('5 complete guides'), 'Homepage reflects completed guides');
 for(const slug of patternDirs) assert.ok(home.includes(`patterns/${slug}/`),`Homepage links ${slug}`);
 let count=0;
 async function scan(dir) {
@@ -55,3 +55,9 @@ assert.equal(await readFile('dist/downloads/PrototypeDemo.java','utf8'), prototy
 const prototypeGuide = await readFile('dist/patterns/prototype/index.html','utf8');
 assert.ok(prototypeGuide.includes('Complete guide') && !prototypeGuide.includes('This guide is planned'));
 assert.ok(prototypeGuide.includes('ReportPrototype') && prototypeGuide.includes('Runtime copy workflow') && prototypeGuide.includes('<svg'));
+
+const singletonSource = await readFile('examples/singleton/SingletonDemo.java','utf8');
+assert.equal(await readFile('dist/downloads/SingletonDemo.java','utf8'), singletonSource, 'Singleton download matches tested source');
+const singletonGuide = await readFile('dist/patterns/singleton/index.html','utf8');
+assert.ok(singletonGuide.includes('Complete guide') && !singletonGuide.includes('This guide is planned'));
+assert.ok(singletonGuide.includes('ReportFormats') && singletonGuide.includes('Runtime scope and concurrency') && singletonGuide.includes('<svg'));

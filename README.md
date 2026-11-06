@@ -10,7 +10,8 @@ A searchable field guide to all 23 Gang of Four design patterns, with Java examp
 - Complete Builder guide: GoF builder/director roles, fluent Java idiom, two representations, diagrams, lifecycle rules, extension exercise, and behavior checks.
 - Complete Factory Method guide: creator/product roles, an inherited export workflow, overridable creation hooks, diagrams, comparisons, extension exercise, and behavior checks.
 - Complete Prototype guide: explicit copy contracts, nested mutable-state isolation, a named registry, diagrams, clone comparisons, and behavior checks.
-- Clearly labeled outlines for the other 19 guides.
+- Complete Singleton guide: enum implementation, explicit scope, immutable state, dependency injection, concurrency checks, and alternatives.
+- Clearly labeled outlines for the other 18 guides.
 - Full-text Pagefind search and a persistent light/dark toggle (light by default).
 
 ## Development
@@ -55,7 +56,7 @@ java BuilderDemo text
 java BuilderDemo html
 ```
 
-The Builder listing and download use `examples/builder/BuilderDemo.java` directly. CI runs all four completed patterns in a Java 21 matrix.
+The Builder listing and download use `examples/builder/BuilderDemo.java` directly. CI runs all five completed patterns in a Java 21 matrix.
 
 Factory Method checks:
 
@@ -79,6 +80,17 @@ java PrototypeDemo
 ```
 
 The Prototype listing and download use `examples/prototype/PrototypeDemo.java` directly.
+
+Singleton checks (JDK 21, including virtual-thread concurrent access):
+
+```sh
+cd examples/singleton
+javac --release 21 SingletonDemo.java SingletonChecks.java
+java SingletonChecks
+java SingletonDemo
+```
+
+The Singleton listing and download use `examples/singleton/SingletonDemo.java` directly.
 
 ## Content
 
