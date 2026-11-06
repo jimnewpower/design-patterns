@@ -1,0 +1,27 @@
+---
+interface Node { title: string; role: string; detail: string }
+interface Edge { from: number; to: number; label: string; relation?: 'uses' | 'implements' | 'extends' }
+interface Props { id: string; title: string; description: string; nodes: Node[]; edges: Edge[]; caption: string }
+const { id, title, description, nodes, edges, caption } = Astro.props;
+if (nodes.length !== 4) throw new Error('Role diagram requires four scoped nodes');
+const positions = [{x:20,y:20},{x:400,y:20},{x:20,y:225},{x:400,y:225}];
+const route = (edge: Edge) => {
+  const from=positions[edge.from],to=positions[edge.to];
+  if(from.y===to.y) { const right=from.x<to.x; return `M${from.x+(right?280:0)} ${from.y+50} H${to.x+(right?0:280)}`; }
+  if(from.x===to.x) { const down=from.y<to.y; return `M${from.x+140} ${from.y+(down?100:0)} V${to.y+(down?0:100)}`; }
+  const down=from.y<to.y;
+  return `M${from.x+140} ${from.y+(down?100:0)} V172 H${to.x+140} V${to.y+(down?0:100)}`;
+};
+const labelPosition = (edge: Edge) => {
+  const a=positions[edge.from],b=positions[edge.to];
+  if(a.y===b.y) return {x:350,y:a.y+38};
+  if(a.x===b.x) return {x:a.x+140,y:173};
+  return {x:350,y:160};
+};
+---
+<figure><svg viewBox="0 0 700 350" role="img" aria-labelledby={`${id}-title ${id}-desc`}><title id={`${id}-title`}>{title}</title><desc id={`${id}-desc`}>{description}</desc>
+<defs><marker id={`${id}-arrow`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10" fill="none" stroke="currentColor"/></marker><marker id={`${id}-triangle`} viewBox="0 0 12 12" refX="11" refY="6" markerWidth="10" markerHeight="10" orient="auto"><path d="M1 1 L11 6 L1 11 Z" fill="var(--surface)" stroke="currentColor"/></marker></defs>
+{edges.map(edge=><g><path class="edge" d={route(edge)} stroke-dasharray={edge.relation==='implements'?'5 4':undefined} marker-end={`url(#${id}-${edge.relation==='implements'||edge.relation==='extends'?'triangle':'arrow'})`}/><text class="edge-label" {...labelPosition(edge)}>{edge.label}</text></g>)}
+{nodes.map((node,i)=><g><rect class="node" x={positions[i].x} y={positions[i].y} width="280" height="100"/><text x={positions[i].x+140} y={positions[i].y+25} class="role">{node.role}</text><text x={positions[i].x+140} y={positions[i].y+53}>{node.title}</text><text x={positions[i].x+140} y={positions[i].y+80} class="detail">{node.detail}</text></g>)}
+</svg><figcaption>{caption}</figcaption></figure>
+<style>figure{margin:28px 0;overflow-x:auto}svg{display:block;width:100%;height:auto;min-width:600px;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:8px}text{text-anchor:middle;fill:var(--ink);font:14px system-ui,sans-serif}.role,.detail{font-size:12px;fill:var(--muted)}.edge-label{font-size:12px;fill:var(--muted);paint-order:stroke;stroke:var(--surface);stroke-width:6px;stroke-linejoin:round}.edge{fill:none;stroke:currentColor;stroke-width:1.5}.node{fill:var(--soft);stroke:var(--line);rx:5}figcaption{font-size:.8rem;color:var(--muted);margin-top:9px}@media print{svg{min-width:0}}</style>

@@ -3,27 +3,150 @@ title: "Flyweight"
 category: "Structural"
 order: 11
 intent: "Share common object state to reduce memory use."
-keywords: ["memory", "shared state"]
-status: "planned"
-related: []
+keywords: ["memory", "shared state", "flyweight", "example", "Java"]
+status: "complete"
+related: ["singleton", "prototype", "composite"]
 ---
 
-> This guide is planned. The intent below is available now; the implementation walkthrough is still to come.
+import SourceListing from '../../components/SourceListing.astro';
+import PatternDiagram from '../../components/PatternDiagram.astro';
+import RuntimeSteps from '../../components/RuntimeSteps.astro';
+import { path } from '../../data/navigation';
 
-## Intent
+## The idea in plain English
 
-Share common object state to reduce memory use.
+Flyweight shares reusable state across many objects to avoid storing the same information repeatedly. Labels have individual text and positions, but can share an immutable font-and-size Style. The style is intrinsic state; text and position are extrinsic state.
 
-## Guide outline
+> Share only what is intrinsic; the most important line is often the boundary between shared metadata and per-use context.
 
-- The problem and a plain-English explanation
-- At least three practical use cases
-- Pattern roles and a UML class diagram
-- A step-by-step Java 21 implementation
-- Runtime sequence and expected output
-- An extension exercise and behavior checks
-- Tradeoffs, alternatives, and reference links
+## The problem before the pattern
 
-## Related patterns
+Thousands of labels can duplicate identical formatting objects. Putting label coordinates inside a shared style would instead create accidental coupling. Separate state that truly varies per placement from state that can be shared safely.
 
-Related-pattern comparisons will be added with the full guide.
+## Practical use cases
+
+1. Text glyph or style data shared across document positions.
+2. Map marker symbols shared across many coordinates.
+3. Repeated material or mesh metadata in visualization.
+4. Immutable formatting metadata in large reports.
+
+## Structure and pattern roles
+
+<PatternDiagram {...{"id": "flyweight-roles", "title": "Flyweight role relationships", "description": "StyleFactory: Flyweight factory; Style: Immutable flyweight; Label: Context; Client: Consumer role. Share only what is intrinsic; the most important line is often the boundary between shared metadata and per-use context.", "nodes": [{"title": "StyleFactory", "role": "Flyweight factory", "detail": "get(font, size)"}, {"title": "Style", "role": "Immutable flyweight", "detail": "font, size"}, {"title": "Client", "role": "Consumer role", "detail": "creates label placements"}, {"title": "Label", "role": "Context", "detail": "text, y, style"}], "edges": [{"to": 1, "label": "interns", "from": 0}, {"to": 0, "label": "queries", "from": 2}, {"to": 3, "label": "creates", "from": 2}, {"to": 1, "label": "uses style", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+
+| Role | Java types | Responsibility |
+| --- | --- | --- |
+| Flyweight | Style | Immutable shared font and size. |
+| Factory | StyleFactory | Reuses equal Style keys within this factory. |
+| Context | Label | Owns text, position, and a reference to a style. |
+| Client | main | Obtains shared styles and creates placements. |
+
+## Java walkthrough
+
+### 1. Identify intrinsic state
+
+Style is an immutable record. Equality includes both font and size, so the cache key covers all shared state.
+
+### 2. Reuse through a factory
+
+computeIfAbsent returns the existing style for an equal key. The example exposes cache size to make reuse observable.
+
+### 3. Keep placement external
+
+Label owns text and its y coordinate. Sharing its style never changes another label position.
+
+### 4. Render with both states
+
+draw combines placement data and style fields. The labels remain distinct objects with intentionally shared metadata.
+
+The key collaboration is visible here (imports and surrounding types are in the complete listing):
+
+```java
+return cache.computeIfAbsent(key, value -> value);
+```
+
+## Runtime sequence
+
+<RuntimeSteps id="flyweight-runtime" title="One concrete execution trace" steps={[{"label": "First lookup", "detail": "Client requests Mono at size 12; factory stores a Style."}, {"label": "Repeated lookup", "detail": "An equal key retrieves the stored style instance."}, {"label": "Place independently", "detail": "Cameo uses y=10; GitLab uses y=40."}, {"label": "Render", "detail": "Each placement combines its own text with the shared style."}]} />
+
+## Complete runnable example
+
+This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+
+<a href={path('downloads/FlyweightDemo.java')} download="FlyweightDemo.java">Download FlyweightDemo.java ↓</a>
+
+<SourceListing slug="flyweight" prefix="Flyweight" />
+
+### Compile and run
+
+From the repository root:
+
+```bash
+cd examples/flyweight
+javac --release 21 FlyweightDemo.java
+java FlyweightDemo
+```
+
+Or run the single-file source directly:
+
+```bash
+java FlyweightDemo.java
+```
+
+Expected output:
+
+```text
+Shared style: true
+Cameo @10 [Mono 12]
+GitLab @40 [Mono 12]
+```
+
+## Extension exercise
+
+Add a color field to Style and to its key. Verify that different colors never share the same flyweight while identical full keys do. Then measure retained memory with many labels before deciding whether this design saves enough to justify a cache.
+
+## Verification
+
+FlyweightChecks.java verifies: Identity reuse for equal keys, different instances for different sizes, cache cardinality, independent label placement, and rejection of invalid styles.
+
+```bash
+cd examples/flyweight
+javac --release 21 FlyweightDemo.java FlyweightChecks.java
+java FlyweightChecks
+```
+
+Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+
+## Tradeoffs and implementation limits
+
+| Concern | Design judgment |
+| --- | --- |
+| Memory | Sharing can help with many repeated objects, but keys and cache bookkeeping cost memory too. |
+| Immutability | Shared state must be stable or explicitly synchronized; a mutable style can affect every placement. |
+| Cache lifetime | Decide bounds, eviction, and concurrency rather than using a global unbounded map by default. |
+
+The factory uses a single-threaded HashMap and retains every requested style for its lifetime. It allocates a candidate key per lookup. This teaching example demonstrates identity reuse; it is not a benchmark or proof of net memory savings.
+
+## Compare related patterns
+
+| Approach | Distinction |
+| --- | --- |
+| Singleton | Restricts a type to one instance in a scope; Flyweight maintains many shared values by key. |
+| Prototype | Creates independent configured copies; Flyweight intentionally shares intrinsic state. |
+
+<a href={path('patterns/singleton/')}> Singleton guide →</a> · <a href={path('patterns/prototype/')}> Prototype guide →</a> · <a href={path('patterns/composite/')}> Composite guide →</a>
+
+## Quick reference
+
+- **Intent:** Share common object state to reduce memory use.
+- **Recognize it:** Thousands of labels can duplicate identical formatting objects.
+- **Key collaboration:** computeIfAbsent returns the existing style for an equal key.
+- **Ask first:** Share only what is intrinsic; the most important line is often the boundary between shared metadata and per-use context.
+
+## References
+
+- [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Flyweight chapter.
+- [Oracle Java 21 — Map.computeIfAbsent](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Map.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Refactoring.Guru — Flyweight](https://refactoring.guru/design-patterns/flyweight). Illustrated secondary explanation and comparisons.
+
+The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

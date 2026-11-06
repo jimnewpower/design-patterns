@@ -1,30 +1,29 @@
 # Pattern Atlas
 
-A searchable field guide to all 23 Gang of Four design patterns, with Java examples.
+A searchable field guide to all **23 Gang of Four design patterns**, with self-contained Java 21 examples.
 
-## First release
+## Catalog
 
-- Atlas homepage with the three categories and links to every pattern.
-- Field Guide layout with category navigation, table of contents, adjacent patterns, and print styles.
-- Complete Abstract Factory guide: problem, four use cases, class/sequence diagrams, Java walkthrough, runnable source, Markdown extension, verification, tradeoffs, and references.
-- Complete Builder guide: GoF builder/director roles, fluent Java idiom, two representations, diagrams, lifecycle rules, extension exercise, and behavior checks.
-- Complete Factory Method guide: creator/product roles, an inherited export workflow, overridable creation hooks, diagrams, comparisons, extension exercise, and behavior checks.
-- Complete Prototype guide: explicit copy contracts, nested mutable-state isolation, a named registry, diagrams, clone comparisons, and behavior checks.
-- Complete Singleton guide: enum implementation, explicit scope, immutable state, dependency injection, concurrency checks, and alternatives.
-- Complete Adapter guide: a simulated CAD API boundary, exact unit conversion, error translation, diagrams, contract checks, and related-wrapper comparisons.
-- Clearly labeled outlines for the other 17 guides.
-- Full-text Pagefind search and a persistent light/dark toggle (light by default).
+| Category | Guides |
+| --- | --- |
+| Creational | Abstract Factory, Builder, Factory Method, Prototype, Singleton |
+| Structural | Adapter, Bridge, Composite, Decorator, Facade, Flyweight, Proxy |
+| Behavioral | Chain of Responsibility, Command, Interpreter, Iterator, Mediator, Memento, Observer, State, Strategy, Template Method, Visitor |
+
+Every guide includes a plain-English explanation, a problem statement, at least three use cases, a role diagram, implementation walkthrough, runtime trace, complete source listing and download, compile/run commands, expected output, behavior checks, extension work, tradeoffs, related-pattern links, and references.
+
+The homepage groups patterns by category. Guides include category navigation, a table of contents, previous/next links, light/dark themes, copy controls, and print styles. Pagefind indexes all guides without a search server. Examples are teaching implementations with explicit limits, not production SDK integrations or substitutes for domain validation.
 
 ## Development
 
-Requires Node.js 24 LTS and npm. Java checks require a JDK 21.
+Requires Node.js 24 LTS, npm, and a JDK 21 for the Java checks.
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Open the printed local URL with `/design-patterns/` appended. Search indexes are generated at build time, so use the production preview to test search:
+Use the printed local URL under `/design-patterns/`. Search is generated at build time, so use production preview to test it:
 
 ```sh
 npm run check
@@ -33,91 +32,56 @@ npm test
 npm run preview
 ```
 
-The default base is `/design-patterns` for the GitHub Pages project URL. To host at the root, build with `SITE_BASE=/ npm run build`. `npm test` currently checks the default project base.
-
-## Java checks
+The default base is `/design-patterns` for GitHub Pages. To host at the root, build and verify with:
 
 ```sh
-cd examples/abstract-factory
-javac --release 21 AbstractFactoryDemo.java AbstractFactoryChecks.java
-java AbstractFactoryChecks
-java AbstractFactoryDemo text
-java AbstractFactoryDemo html
+SITE_BASE=/ npm run build
+SITE_BASE=/ npm test
 ```
 
-The source listing and download are generated from `examples/abstract-factory/AbstractFactoryDemo.java`, so they remain synchronized. The example uses dependency-free behavior checks; no Maven installation is needed for this first guide.
+## Java examples
 
-Builder checks:
+Each `examples/<pattern>/` directory contains its own `*Demo.java` and `*Checks.java`. There are no external Java dependencies or shared classpath requirements.
 
 ```sh
-cd examples/builder
-javac --release 21 BuilderDemo.java BuilderChecks.java
-java BuilderChecks
-java BuilderDemo text
-java BuilderDemo html
+npm run test:java
+# Or select one pattern:
+node scripts/run-java.mjs visitor
 ```
 
-The Builder listing and download use `examples/builder/BuilderDemo.java` directly. CI runs all six completed patterns in a Java 21 matrix.
+The runner compiles into temporary directories, executes behavior checks with timeouts, and runs each demo. For the 17 newly completed guides it compares actual stdout against `expected.txt`; site checks verify the same fixture appears in the guide. No generated class files are retained.
 
-Factory Method checks:
+You can also run examples manually:
 
 ```sh
-cd examples/factory-method
-javac --release 21 FactoryMethodDemo.java FactoryMethodChecks.java
-java FactoryMethodChecks
-java FactoryMethodDemo text
-java FactoryMethodDemo html
+cd examples/visitor
+javac --release 21 VisitorDemo.java VisitorChecks.java
+java VisitorChecks
+java VisitorDemo
+# Single-file source launcher:
+java VisitorDemo.java
 ```
 
-The Factory Method listing and download use `examples/factory-method/FactoryMethodDemo.java` directly.
+Abstract Factory, Builder, and Factory Method additionally accept `text` or `html` as demo arguments. The other demos take no arguments. The Singleton and Proxy checks include concurrent access tests; most teaching implementations deliberately assume single-threaded use.
 
-Prototype checks:
+## Content and source integrity
 
-```sh
-cd examples/prototype
-javac --release 21 PrototypeDemo.java PrototypeChecks.java
-java PrototypeChecks
-java PrototypeDemo
-```
+Guides are in `src/content/patterns/*.mdx`. Content collection validation checks category, order, intent, status, keywords, and related pattern slugs. The registry `src/data/examples.json` maps all 23 patterns to demo/check classes, download paths, and smoke-run arguments.
 
-The Prototype listing and download use `examples/prototype/PrototypeDemo.java` directly.
+The displayed listings and downloads import the same Java files CI compiles. The six earlier guides retain their existing source components and download URLs; the remaining guides share `SourceListing.astro` and a static download route. This keeps links stable while avoiding one new component and route per pattern.
 
-Singleton checks (JDK 21, including virtual-thread concurrent access):
+`PatternDiagram.astro` renders accessible, focused UML-style role diagrams. They show selected types and labeled collaborations; the role table covers the full example. `RuntimeSteps.astro` shows an ordered concrete execution trace. Diagrams and content use theme-aware colors and print styling.
 
-```sh
-cd examples/singleton
-javac --release 21 SingletonDemo.java SingletonChecks.java
-java SingletonChecks
-java SingletonDemo
-```
+`npm test` checks all guides are complete, catalog links and local anchors resolve, diagrams exist, displayed code and downloads match source, expected-output blocks match fixtures, and Pagefind assets were generated. It does not replace browser layout or interaction testing.
 
-The Singleton listing and download use `examples/singleton/SingletonDemo.java` directly.
+## CI and deployment
 
-Adapter checks:
+PR CI runs the Astro check, production build, Pagefind indexing, and site integrity checks. A separate Java job compiles/tests all 23 examples on JDK 21 and verifies demo outputs. The production site is retained as a workflow artifact.
 
-```sh
-cd examples/adapter
-javac --release 21 AdapterDemo.java AdapterChecks.java
-java AdapterChecks
-java AdapterDemo
-```
+GitHub Pages deployment remains opt-in. After merging, enable **Settings → Pages → Source: GitHub Actions**, then run **Deploy to GitHub Pages** on `main`. Expected project URL: `https://jimnewpower.github.io/design-patterns/`. Content PRs do not deploy automatically.
 
-The Adapter listing and download use `examples/adapter/AdapterDemo.java` directly. The legacy CAD client is an in-memory stand-in, not a vendor integration.
-
-## Content
-
-Pattern guides live in `src/content/patterns/*.mdx`. `src/content.config.ts` validates title, category, order, intent, keywords, status, and related-pattern slugs. Set `status: complete` when a guide is implemented. The remaining outlines deliberately contain no fake Java walkthroughs.
-
-Edit components in `src/components`, layouts in `src/layouts`, and the design tokens/responsive styles in `src/styles/global.css`. Diagrams are accessible inline SVG components, with visible captions and text descriptions. Search indexes guide content, excluding shared navigation.
-
-## Review and deployment
-
-The CI workflow checks TypeScript/Astro, builds and indexes the site, verifies internal links, and compiles/tests the Java example on JDK 21. The built site is retained as a workflow artifact.
-
-Deployment is deliberately manual for this review stage. After merging, enable **Settings → Pages → Source: GitHub Actions**, then run **Deploy to GitHub Pages** on `main`. Expected URL: `https://jimnewpower.github.io/design-patterns/`. This PR does not enable hosting or deploy the site.
-
-Use **Print / save PDF** on a guide for a print-oriented export. Automatic curated PDF generation is not part of this first release.
+Use **Print / save PDF** on a guide for a print-oriented export. Automated curated PDF generation is not included.
 
 ## References and licensing
 
-The Abstract Factory guide links to the GoF book, Refactoring.Guru, and Java 21 documentation. Text and code here are original teaching material; the site does not reproduce the book. No project-wide redistribution license has been selected yet. Dependencies retain their respective licenses.
+Each guide links to the original GoF book and relevant Java documentation, with secondary explanations where useful. Text, diagrams, and examples are original teaching material and do not reproduce the book. No project-wide redistribution license has been selected. Dependencies retain their respective licenses.

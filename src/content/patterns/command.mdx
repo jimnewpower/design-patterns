@@ -3,27 +3,149 @@ title: "Command"
 category: "Behavioral"
 order: 14
 intent: "Represent a request as an object."
-keywords: ["request", "undo", "queue"]
-status: "planned"
-related: ["chain-of-responsibility"]
+keywords: ["request", "undo", "queue", "command", "example", "Java"]
+status: "complete"
+related: ["memento", "strategy", "chain-of-responsibility"]
 ---
 
-> This guide is planned. The intent below is available now; the implementation walkthrough is still to come.
+import SourceListing from '../../components/SourceListing.astro';
+import PatternDiagram from '../../components/PatternDiagram.astro';
+import RuntimeSteps from '../../components/RuntimeSteps.astro';
+import { path } from '../../data/navigation';
 
-## Intent
+## The idea in plain English
 
-Represent a request as an object.
+Command turns an operation into an object containing the information needed to execute it. An append command knows its document and text. A history invokes commands and can ask the latest one to undo itself without knowing the document-edit details.
 
-## Guide outline
+> Command does not require undo. If undo is offered, define receiver ownership, failure behavior, and reversibility explicitly.
 
-- The problem and a plain-English explanation
-- At least three practical use cases
-- Pattern roles and a UML class diagram
-- A step-by-step Java 21 implementation
-- Runtime sequence and expected output
-- An extension exercise and behavior checks
-- Tradeoffs, alternatives, and reference links
+## The problem before the pattern
 
-## Related patterns
+Buttons, queues, and undo histories should not each implement document editing. Storing only callbacks may also omit the state needed to reverse an operation. A command separates who requests an action from the receiver that performs it.
 
-- [Chain Of Responsibility](../chain-of-responsibility/)
+## Practical use cases
+
+1. Editor actions with undo support.
+2. Queued application operations with explicit parameters.
+3. UI actions invoked from menus, buttons, or keyboard shortcuts.
+4. Batch or macro operations that reuse the same invocation contract.
+
+## Structure and pattern roles
+
+<PatternDiagram {...{"id": "command-roles", "title": "Command role relationships", "description": "Command: Command interface; AppendText: Concrete command; History: Invoker; Document: Receiver. Command does not require undo. If undo is offered, define receiver ownership, failure behavior, and reversibility explicitly.", "nodes": [{"title": "Command", "role": "Command interface", "detail": "execute(), undo()"}, {"title": "AppendText", "role": "Concrete command", "detail": "receiver, addition, prior state"}, {"title": "History", "role": "Invoker", "detail": "execute(command), undo()"}, {"title": "Document", "role": "Receiver", "detail": "text(), replace(value)"}], "edges": [{"to": 0, "label": "implements", "relation": "implements", "from": 1}, {"to": 0, "label": "invokes", "relation": "uses", "from": 2}, {"to": 3, "label": "edits receiver", "relation": "uses", "from": 1}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+
+| Role | Java types | Responsibility |
+| --- | --- | --- |
+| Command | Command | Uniform execute and undo operations. |
+| Concrete command | AppendText | Stores append input and reversible before/after state. |
+| Receiver | Document | Owns the text being edited. |
+| Invoker | History | Records successful commands and invokes undo in LIFO order. |
+
+## Java walkthrough
+
+### 1. Separate receiver and operation
+
+Document owns text. AppendText owns the request and snapshots around that request.
+
+### 2. Execute with lifecycle checks
+
+The command rejects applying itself twice without undo. It saves prior text and records its expected post-edit text.
+
+### 3. Record only successful execution
+
+History pushes after execute returns. A failing command is not added to the undo stack.
+
+### 4. Undo conservatively
+
+History peeks first and removes only after a successful undo. AppendText rejects undo if the receiver text differs from the expected result.
+
+The key collaboration is visible here (imports and surrounding types are in the complete listing):
+
+```java
+Objects.requireNonNull(command).execute(); commands.push(command);
+```
+
+## Runtime sequence
+
+<RuntimeSteps id="command-runtime" title="One concrete execution trace" steps={[{"label": "Execute first command", "detail": "Append Engineering and push the command."}, {"label": "Execute second command", "detail": "Append report and push the command."}, {"label": "Request undo", "detail": "History invokes the most recent command."}, {"label": "Restore prior content", "detail": "Second command restores Engineering and leaves the first in history."}]} />
+
+## Complete runnable example
+
+This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+
+<a href={path('downloads/CommandDemo.java')} download="CommandDemo.java">Download CommandDemo.java ↓</a>
+
+<SourceListing slug="command" prefix="Command" />
+
+### Compile and run
+
+From the repository root:
+
+```bash
+cd examples/command
+javac --release 21 CommandDemo.java
+java CommandDemo
+```
+
+Or run the single-file source directly:
+
+```bash
+java CommandDemo.java
+```
+
+Expected output:
+
+```text
+Engineering report
+Engineering
+```
+
+## Extension exercise
+
+Add redo with a second stack. Clear redo when a new successful edit branches history. For production collaborative editing, replace whole-text equality with an explicit version or operation model; matching text alone cannot detect an edit-away-and-back sequence.
+
+## Verification
+
+CommandChecks.java verifies: LIFO reversal, empty undo, re-execution after undo, duplicate application rejection, external-edit detection, and retaining valid history when execution or undo fails.
+
+```bash
+cd examples/command
+javac --release 21 CommandDemo.java CommandChecks.java
+java CommandChecks
+```
+
+Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+
+## Tradeoffs and implementation limits
+
+| Concern | Design judgment |
+| --- | --- |
+| Decoupling | Invokers become generic while command types and lifecycle rules grow. |
+| Undo | Not every action is reversible; compensating a remote action is a separate domain operation. |
+| Failures | A failing execute may already have side effects; the interface alone cannot supply atomicity. |
+
+This is a single-threaded in-memory editor with no persistence. Undo stores whole text, so large documents cost memory. It expects edits to go through the history; it does not implement distributed undo, transactions, or guaranteed reversal of arbitrary external side effects.
+
+## Compare related patterns
+
+| Approach | Distinction |
+| --- | --- |
+| Strategy | Represents an interchangeable algorithm; Command represents a particular request with execution context. |
+| Memento | Captures state for restoration; a Command can use a Memento to implement undo. |
+
+<a href={path('patterns/memento/')}> Memento guide →</a> · <a href={path('patterns/strategy/')}> Strategy guide →</a> · <a href={path('patterns/chain-of-responsibility/')}> Chain Of Responsibility guide →</a>
+
+## Quick reference
+
+- **Intent:** Represent a request as an object.
+- **Recognize it:** Buttons, queues, and undo histories should not each implement document editing.
+- **Key collaboration:** The command rejects applying itself twice without undo.
+- **Ask first:** Command does not require undo. If undo is offered, define receiver ownership, failure behavior, and reversibility explicitly.
+
+## References
+
+- [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Command chapter.
+- [Oracle Java 21 — Runnable](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Runnable.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Refactoring.Guru — Command](https://refactoring.guru/design-patterns/command). Illustrated secondary explanation and comparisons.
+
+The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

@@ -3,27 +3,149 @@ title: "Interpreter"
 category: "Behavioral"
 order: 15
 intent: "Represent and evaluate expressions in a small language."
-keywords: ["grammar", "DSL", "expression"]
-status: "planned"
-related: []
+keywords: ["grammar", "DSL", "expression", "interpreter", "example", "Java"]
+status: "complete"
+related: ["composite", "visitor", "strategy"]
 ---
 
-> This guide is planned. The intent below is available now; the implementation walkthrough is still to come.
+import SourceListing from '../../components/SourceListing.astro';
+import PatternDiagram from '../../components/PatternDiagram.astro';
+import RuntimeSteps from '../../components/RuntimeSteps.astro';
+import { path } from '../../data/navigation';
 
-## Intent
+## The idea in plain English
 
-Represent and evaluate expressions in a small language.
+Interpreter represents a small language as objects that know how to evaluate themselves. A report-selection rule can combine tags with AND, OR, and NOT. Each expression node evaluates its part against a context and combines the results.
 
-## Guide outline
+> An AST is not a parser: keep the language you actually implement distinct from the language you might later accept as text.
 
-- The problem and a plain-English explanation
-- At least three practical use cases
-- Pattern roles and a UML class diagram
-- A step-by-step Java 21 implementation
-- Runtime sequence and expected output
-- An extension exercise and behavior checks
-- Tradeoffs, alternatives, and reference links
+## The problem before the pattern
 
-## Related patterns
+Hard-coding each rule combination as a new conditional makes a small rule language difficult to compose or inspect. An expression tree makes the grammar explicit and allows rules to be assembled from the same small set of node types.
 
-Related-pattern comparisons will be added with the full guide.
+## Practical use cases
+
+1. Small tag-filter languages for reports or inventories.
+2. Simple eligibility expressions over known attributes.
+3. Tiny arithmetic or boolean domain languages.
+4. Configurable matching rules where a full language engine is unnecessary.
+
+## Structure and pattern roles
+
+<PatternDiagram {...{"id": "interpreter-roles", "title": "Interpreter role relationships", "description": "Expr: Expression interface; Tag: Terminal expression; And / Or / Not: Nonterminal expressions; Set<String>: Context. An AST is not a parser: keep the language you actually implement distinct from the language you might later accept as text.", "nodes": [{"title": "Expr", "role": "Expression interface", "detail": "evaluate(tags): boolean"}, {"title": "Tag", "role": "Terminal expression", "detail": "tests membership"}, {"title": "And / Or / Not", "role": "Nonterminal expressions", "detail": "evaluate child expressions"}, {"title": "Set<String>", "role": "Context", "detail": "available tags"}], "edges": [{"to": 0, "label": "implements", "relation": "implements", "from": 1}, {"to": 0, "label": "implements", "relation": "implements", "from": 2}, {"to": 3, "label": "reads context", "relation": "uses", "from": 1}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+
+| Role | Java types | Responsibility |
+| --- | --- | --- |
+| Abstract expression | Expr | Common evaluation contract. |
+| Terminal expression | Tag | Resolves one tag from context. |
+| Nonterminal expressions | And, Or, Not | Compose child evaluations. |
+| Context | Set of strings | Supplies tag membership for evaluation. |
+
+## Java walkthrough
+
+### 1. State the grammar
+
+The grammar has tag, AND, OR, and NOT nodes. This example constructs the AST directly; it has no text parser.
+
+### 2. Implement terminal evaluation
+
+Tag validates its name and tests context membership. Tag matching is exact and case-sensitive.
+
+### 3. Implement composition
+
+And and Or use short-circuit boolean operators. Not negates its child. Constructors reject null operands.
+
+### 4. Evaluate one tree
+
+Build approved AND NOT obsolete, then evaluate it against multiple tag sets without rewriting the rule.
+
+The key collaboration is visible here (imports and surrounding types are in the complete listing):
+
+```java
+Expr rule = new And(new Tag("approved"), new Not(new Tag("obsolete")));
+```
+
+## Runtime sequence
+
+<RuntimeSteps id="interpreter-runtime" title="One concrete execution trace" steps={[{"label": "Evaluate And", "detail": "Rule first asks whether approved is present."}, {"label": "Evaluate terminal", "detail": "Tag looks up membership in the context."}, {"label": "Evaluate Not", "detail": "If needed, inspect obsolete and negate that result."}, {"label": "Return result", "detail": "And combines the results for the current item."}]} />
+
+## Complete runnable example
+
+This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+
+<a href={path('downloads/InterpreterDemo.java')} download="InterpreterDemo.java">Download InterpreterDemo.java ↓</a>
+
+<SourceListing slug="interpreter" prefix="Interpreter" />
+
+### Compile and run
+
+From the repository root:
+
+```bash
+cd examples/interpreter
+javac --release 21 InterpreterDemo.java
+java InterpreterDemo
+```
+
+Or run the single-file source directly:
+
+```bash
+java InterpreterDemo.java
+```
+
+Expected output:
+
+```text
+Approved item: true
+Obsolete item: false
+```
+
+## Extension exercise
+
+Add a text parser for a deliberately small grammar. Define precedence, parentheses, whitespace, invalid-token errors, and maximum nesting before coding it. Keep parsing separate from evaluation, and do not translate untrusted rule text into executable Java.
+
+## Verification
+
+InterpreterChecks.java verifies: AND/OR truth cases, NOT and double negation, contradictory expressions, empty contexts, and malformed node construction.
+
+```bash
+cd examples/interpreter
+javac --release 21 InterpreterDemo.java InterpreterChecks.java
+java InterpreterChecks
+```
+
+Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+
+## Tradeoffs and implementation limits
+
+| Concern | Design judgment |
+| --- | --- |
+| Grammar growth | Each expression form needs another type and tests. |
+| Composability | ASTs are easy to assemble but may need a separate parser and error model. |
+| Complex languages | A parser library or dedicated engine is often better once typing, binding, or optimization dominates. |
+
+There is no string parser, precedence ambiguity, variable mutation, or external access. The context should remain stable during evaluation. Deep ASTs can exhaust recursion; a production untrusted language needs size and depth limits. This is not a general-purpose rule engine.
+
+## Compare related patterns
+
+| Approach | Distinction |
+| --- | --- |
+| Composite | Provides the expression-tree structure; Interpreter adds language semantics to each node. |
+| Visitor | Can separate evaluation or printing from a stable AST when operations multiply. |
+
+<a href={path('patterns/composite/')}> Composite guide →</a> · <a href={path('patterns/visitor/')}> Visitor guide →</a> · <a href={path('patterns/strategy/')}> Strategy guide →</a>
+
+## Quick reference
+
+- **Intent:** Represent and evaluate expressions in a small language.
+- **Recognize it:** Hard-coding each rule combination as a new conditional makes a small rule language difficult to compose or inspect.
+- **Key collaboration:** Tag validates its name and tests context membership.
+- **Ask first:** An AST is not a parser: keep the language you actually implement distinct from the language you might later accept as text.
+
+## References
+
+- [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Interpreter chapter.
+- [Oracle Java 21 — Set](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Set.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Refactoring.Guru — Interpreter](https://refactoring.guru/design-patterns/interpreter). Illustrated secondary explanation and comparisons.
+
+The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

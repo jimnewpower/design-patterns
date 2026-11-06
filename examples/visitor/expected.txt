@@ -1,0 +1,2 @@
+Mass: 130 g
+Sensor[Housing, Board]

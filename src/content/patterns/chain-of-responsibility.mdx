@@ -3,27 +3,150 @@ title: "Chain of Responsibility"
 category: "Behavioral"
 order: 13
 intent: "Pass a request through potential handlers."
-keywords: ["pipeline", "handler"]
-status: "planned"
-related: ["command"]
+keywords: ["pipeline", "handler", "chainofresponsibility", "example", "Java"]
+status: "complete"
+related: ["command", "decorator", "mediator"]
 ---
 
-> This guide is planned. The intent below is available now; the implementation walkthrough is still to come.
+import SourceListing from '../../components/SourceListing.astro';
+import PatternDiagram from '../../components/PatternDiagram.astro';
+import RuntimeSteps from '../../components/RuntimeSteps.astro';
+import { path } from '../../data/navigation';
 
-## Intent
+## The idea in plain English
 
-Pass a request through potential handlers.
+Chain of Responsibility passes a request along potential handlers until one handles it or a terminal policy applies. A tool purchase may be approved by a team lead, escalated to a manager, or rejected when no limit covers the cost.
 
-## Guide outline
+> Specify whether your chain is first-match, all-stages, or explicit continuation; these are different contracts.
 
-- The problem and a plain-English explanation
-- At least three practical use cases
-- Pattern roles and a UML class diagram
-- A step-by-step Java 21 implementation
-- Runtime sequence and expected output
-- An extension exercise and behavior checks
-- Tradeoffs, alternatives, and reference links
+## The problem before the pattern
 
-## Related patterns
+A central approval function can accumulate role-specific conditionals and escalation rules. Callers should submit a request without knowing which approver will accept it. Linked handlers keep each decision local and make ordering explicit at construction.
 
-- [Command](../command/)
+## Practical use cases
+
+1. Approval escalation by authority or amount.
+2. Request handlers that try progressively broader matches.
+3. Help systems that search parent contexts for an answer.
+4. Validation or processing stages with explicit continuation policy.
+
+## Structure and pattern roles
+
+<PatternDiagram {...{"id": "chain-of-responsibility-roles", "title": "Chain of Responsibility role relationships", "description": "Handler: Handler interface; LimitApprover: Concrete handler; Reject: Terminal handler; Request: Input. Specify whether your chain is first-match, all-stages, or explicit continuation; these are different contracts.", "nodes": [{"title": "Handler", "role": "Handler interface", "detail": "handle(request)"}, {"title": "LimitApprover", "role": "Concrete handler", "detail": "name, limit, next"}, {"title": "Reject", "role": "Terminal handler", "detail": "explicit unhandled outcome"}, {"title": "Request", "role": "Input", "detail": "purpose, cost"}], "edges": [{"to": 0, "label": "implements", "relation": "implements", "from": 1}, {"to": 0, "label": "implements", "relation": "implements", "from": 2}, {"to": 1, "label": "evaluated by", "relation": "uses", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+
+| Role | Java types | Responsibility |
+| --- | --- | --- |
+| Handler | Handler | Declares the request operation. |
+| Concrete handler | LimitApprover | Handles requests within its limit or delegates. |
+| Terminal handler | Reject | Makes the unhandled case explicit. |
+| Request | Request | Immutable purpose and nonnegative integral cost. |
+
+## Java walkthrough
+
+### 1. Define a request
+
+Request rejects negative costs. Values are abstract cost units, not a currency model.
+
+### 2. Define the handler contract
+
+Each handler returns one decision string. This chain short-circuits on the first approval.
+
+### 3. Link potential approvers
+
+A LimitApprover stores its successor. It approves within its limit and delegates all larger requests.
+
+### 4. Terminate explicitly
+
+Reject supplies a final outcome, so callers do not receive null when no approver accepts.
+
+The key collaboration is visible here (imports and surrounding types are in the complete listing):
+
+```java
+return request.cost() <= limit ? "Approved by " + name : next.handle(request);
+```
+
+## Runtime sequence
+
+<RuntimeSteps id="chain-of-responsibility-runtime" title="One concrete execution trace" steps={[{"label": "Submit 500 units", "detail": "Client sends the request to the team lead."}, {"label": "Escalate", "detail": "Lead limit 100 is insufficient; delegate to manager."}, {"label": "Handle", "detail": "Manager limit 1000 covers the request."}, {"label": "Return decision", "detail": "The first approval returns without visiting Reject."}]} />
+
+## Complete runnable example
+
+This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+
+<a href={path('downloads/ChainOfResponsibilityDemo.java')} download="ChainOfResponsibilityDemo.java">Download ChainOfResponsibilityDemo.java ↓</a>
+
+<SourceListing slug="chain-of-responsibility" prefix="ChainOfResponsibility" />
+
+### Compile and run
+
+From the repository root:
+
+```bash
+cd examples/chain-of-responsibility
+javac --release 21 ChainOfResponsibilityDemo.java
+java ChainOfResponsibilityDemo
+```
+
+Or run the single-file source directly:
+
+```bash
+java ChainOfResponsibilityDemo.java
+```
+
+Expected output:
+
+```text
+Approved by Team lead
+Approved by Manager
+Rejected: no approval limit covers request
+```
+
+## Extension exercise
+
+Add an AuditHandler that records decisions. Decide whether it wraps the whole chain or only logs requests that reach it. Tests should prove whether approved requests continue or stop. Also test reordered limits so an overly broad first handler does not silently bypass intended review.
+
+## Verification
+
+ChainOfResponsibilityChecks.java verifies: Inclusive threshold, zero cost, first-handler short-circuiting, successor invocation, terminal rejection, and invalid request/limit handling.
+
+```bash
+cd examples/chain-of-responsibility
+javac --release 21 ChainOfResponsibilityDemo.java ChainOfResponsibilityChecks.java
+java ChainOfResponsibilityChecks
+```
+
+Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+
+## Tradeoffs and implementation limits
+
+| Concern | Design judgment |
+| --- | --- |
+| Ordering | The first capable handler wins; changing order changes behavior. |
+| Unhandled requests | Define an explicit rejection or fallback rather than dropping requests. |
+| Topology | Mutable successor graphs need cycle prevention; an immutable constructed chain simplifies ownership. |
+
+The chain is assembled as immutable forward references and has no remote calls or identity-based authorization. Name and limit are teaching configuration, not proof of authority. This first-match example is different from a pipeline where every stage must process the request.
+
+## Compare related patterns
+
+| Approach | Distinction |
+| --- | --- |
+| Command | Packages a request as an object for invocation; a chain chooses which handler processes it. |
+| Decorator | Often guarantees delegation while adding behavior; a chain may consume the request and stop. |
+
+<a href={path('patterns/command/')}> Command guide →</a> · <a href={path('patterns/decorator/')}> Decorator guide →</a> · <a href={path('patterns/mediator/')}> Mediator guide →</a>
+
+## Quick reference
+
+- **Intent:** Pass a request through potential handlers.
+- **Recognize it:** A central approval function can accumulate role-specific conditionals and escalation rules.
+- **Key collaboration:** Each handler returns one decision string.
+- **Ask first:** Specify whether your chain is first-match, all-stages, or explicit continuation; these are different contracts.
+
+## References
+
+- [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Chain of Responsibility chapter.
+- [Oracle Java 21 — Objects.requireNonNull](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Objects.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Refactoring.Guru — Chain of Responsibility](https://refactoring.guru/design-patterns/chain-of-responsibility). Illustrated secondary explanation and comparisons.
+
+The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

@@ -1,0 +1,9 @@
+---
+interface Props { id: string; title: string; steps: { label: string; detail: string }[] }
+const { id, title, steps } = Astro.props;
+const height=steps.length*105+10;
+---
+<figure><svg viewBox={`0 0 700 ${height}`} role="img" aria-labelledby={`${id}-title ${id}-desc`}><title id={`${id}-title`}>{title}</title><desc id={`${id}-desc`}>{steps.map((step,i)=>`${i+1}. ${step.label}: ${step.detail}`).join(' ')}</desc><defs><marker id={`${id}-arrow`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10" fill="none" stroke="currentColor"/></marker></defs>
+{steps.map((step,i)=><g>{i>0&&<path class="edge" d={`M350 ${i*105-18} V${i*105+8}`} marker-end={`url(#${id}-arrow)`}/>}<rect x="20" y={i*105+10} width="660" height="75"/><text class="step-label" x="350" y={i*105+38}>{i+1}. {step.label}</text><text class="step-detail" x="350" y={i*105+64}>{step.detail}</text></g>)}
+</svg><figcaption>{title}. Arrows show the order of this example trace, not every possible branch or failure path.</figcaption></figure>
+<style>figure{margin:28px 0;overflow-x:auto}svg{display:block;width:100%;height:auto;min-width:600px;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:8px}rect{fill:var(--soft);stroke:var(--line);rx:5}text{text-anchor:middle;fill:var(--ink);font:14px system-ui,sans-serif}.step-detail{font-size:12px;fill:var(--muted)}.edge{fill:none;stroke:currentColor;stroke-width:1.5}figcaption{font-size:.8rem;color:var(--muted);margin-top:9px}@media print{svg{min-width:0}}</style>

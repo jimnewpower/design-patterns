@@ -2,28 +2,152 @@
 title: "State"
 category: "Behavioral"
 order: 20
-intent: "Change behavior when an object’s internal state changes."
-keywords: ["transitions", "state machine"]
-status: "planned"
-related: ["strategy"]
+intent: "Change behavior when an object\u2019s internal state changes."
+keywords: ["transitions", "state machine", "state", "example", "Java"]
+status: "complete"
+related: ["strategy", "memento", "command"]
 ---
 
-> This guide is planned. The intent below is available now; the implementation walkthrough is still to come.
+import SourceListing from '../../components/SourceListing.astro';
+import PatternDiagram from '../../components/PatternDiagram.astro';
+import RuntimeSteps from '../../components/RuntimeSteps.astro';
+import { path } from '../../data/navigation';
 
-## Intent
+## The idea in plain English
 
-Change behavior when an object’s internal state changes.
+State delegates behavior to an object representing the context’s current state. A review workflow accepts different actions while Draft, Review, or Approved. Each state object defines the actions and transitions valid at that point.
 
-## Guide outline
+> Do not replace a clear three-state switch with classes automatically; the pattern earns its place when state-dependent behavior becomes substantial.
 
-- The problem and a plain-English explanation
-- At least three practical use cases
-- Pattern roles and a UML class diagram
-- A step-by-step Java 21 implementation
-- Runtime sequence and expected output
-- An extension exercise and behavior checks
-- Tradeoffs, alternatives, and reference links
+## The problem before the pattern
 
-## Related patterns
+Repeated switches over a status field scatter transition rules across submit, approve, and reopen operations. A new state then requires coordinated edits to many conditionals. State objects group behavior by the state that owns it.
 
-- [Strategy](../strategy/)
+## Practical use cases
+
+1. Review and approval workflows.
+2. Connection or protocol lifecycle handling.
+3. Order fulfillment transitions.
+4. UI controls whose behavior depends on a mode.
+
+## Structure and pattern roles
+
+<PatternDiagram {...{"id": "state-roles", "title": "State role relationships", "description": "Workflow: Context; ReviewState: State interface; Draft: Concrete state; Review: Concrete state. Do not replace a clear three-state switch with classes automatically; the pattern earns its place when state-dependent behavior becomes substantial.", "nodes": [{"title": "Workflow", "role": "Context", "detail": "current ReviewState"}, {"title": "ReviewState", "role": "State interface", "detail": "submit, approve, reopen, label"}, {"title": "Draft", "role": "Concrete state", "detail": "submit → Review"}, {"title": "Review", "role": "Concrete state", "detail": "approve → Approved"}], "edges": [{"to": 1, "label": "delegates", "relation": "uses", "from": 0}, {"to": 1, "label": "implements", "relation": "implements", "from": 2}, {"to": 1, "label": "implements", "relation": "implements", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+
+| Role | Java types | Responsibility |
+| --- | --- | --- |
+| Context | Workflow | Owns its current state and delegates actions. |
+| State interface | ReviewState | Declares lifecycle actions and default invalid-action behavior. |
+| Concrete states | Draft, Review, Approved | Implement permitted transitions. |
+| Client | main | Invokes actions without editing the state field directly. |
+
+## Java walkthrough
+
+### 1. Define state-dependent actions
+
+ReviewState declares submit, approve, and reopen. Default implementations throw without changing the context.
+
+### 2. Implement allowed transitions
+
+Draft submits to Review. Review approves to Approved or reopens to Draft. Approved reopens to Draft.
+
+### 3. Keep state ownership local
+
+Each Workflow stores its own current reference. Stateless enum state objects can be shared across contexts without sharing the contexts’ current states.
+
+### 4. Delegate instead of switch
+
+Workflow forwards actions and asks state.label for status. Transition logic stays in the concrete state objects.
+
+The key collaboration is visible here (imports and surrounding types are in the complete listing):
+
+```java
+void submit() { state.submit(this); }
+void approve() { state.approve(this); }
+```
+
+## Runtime sequence
+
+<RuntimeSteps id="state-runtime" title="One concrete execution trace" steps={[{"label": "Start", "detail": "A new Workflow owns Draft.INSTANCE."}, {"label": "Submit", "detail": "Draft transitions the context to Review."}, {"label": "Approve", "detail": "Review transitions the context to Approved."}, {"label": "Reopen if needed", "detail": "Approved can return to Draft; invalid actions throw."}]} />
+
+## Complete runnable example
+
+This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+
+<a href={path('downloads/StateDemo.java')} download="StateDemo.java">Download StateDemo.java ↓</a>
+
+<SourceListing slug="state" prefix="State" />
+
+### Compile and run
+
+From the repository root:
+
+```bash
+cd examples/state
+javac --release 21 StateDemo.java
+java StateDemo
+```
+
+Or run the single-file source directly:
+
+```bash
+java StateDemo.java
+```
+
+Expected output:
+
+```text
+Draft
+Review
+Approved
+```
+
+## Extension exercise
+
+Add a Rejected state and a reject action. Decide which states can reopen and which reject actions are invalid. Write a transition table first, then test every permitted edge and representative forbidden edges. Add audit records without exposing a public arbitrary setState operation.
+
+## Verification
+
+StateChecks.java verifies: Full approval path, reopening from Review and Approved, forbidden operations preserving state, and independent workflow contexts.
+
+```bash
+cd examples/state
+javac --release 21 StateDemo.java StateChecks.java
+java StateChecks
+```
+
+Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+
+## Tradeoffs and implementation limits
+
+| Concern | Design judgment |
+| --- | --- |
+| Local behavior | Rules for one state stay together, but small state machines may be clearer as a transition table. |
+| Transitions | Concrete states know neighboring states, which is intentional coupling. |
+| Persistence | Persist stable domain state identifiers and restore deliberately rather than serializing implementation objects blindly. |
+
+This is a synchronous in-memory state machine with no actor permissions, persistence, or transaction boundary. Concurrent actions need serialization or another concurrency model. Shared state objects must remain stateless; request-specific mutable data belongs to the context.
+
+## Compare related patterns
+
+| Approach | Distinction |
+| --- | --- |
+| Strategy | Caller usually selects an algorithm; State changes behavior according to lifecycle transitions. |
+| Memento | Restores earlier data; State models valid behavior at the current lifecycle point. |
+
+<a href={path('patterns/strategy/')}> Strategy guide →</a> · <a href={path('patterns/memento/')}> Memento guide →</a> · <a href={path('patterns/command/')}> Command guide →</a>
+
+## Quick reference
+
+- **Intent:** Change behavior when an object’s internal state changes.
+- **Recognize it:** Repeated switches over a status field scatter transition rules across submit, approve, and reopen operations.
+- **Key collaboration:** Draft submits to Review.
+- **Ask first:** Do not replace a clear three-state switch with classes automatically; the pattern earns its place when state-dependent behavior becomes substantial.
+
+## References
+
+- [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the State chapter.
+- [Oracle Java 21 — Objects.requireNonNull](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Objects.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Refactoring.Guru — State](https://refactoring.guru/design-patterns/state). Illustrated secondary explanation and comparisons.
+
+The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

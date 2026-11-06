@@ -3,27 +3,150 @@ title: "Proxy"
 category: "Structural"
 order: 12
 intent: "Control access to another object."
-keywords: ["access", "lazy", "remote"]
-status: "planned"
-related: ["decorator"]
+keywords: ["access", "lazy", "remote", "proxy", "example", "Java"]
+status: "complete"
+related: ["decorator", "adapter", "singleton"]
 ---
 
-> This guide is planned. The intent below is available now; the implementation walkthrough is still to come.
+import SourceListing from '../../components/SourceListing.astro';
+import PatternDiagram from '../../components/PatternDiagram.astro';
+import RuntimeSteps from '../../components/RuntimeSteps.astro';
+import { path } from '../../data/navigation';
 
-## Intent
+## The idea in plain English
 
-Control access to another object.
+Proxy stands in for another object behind the same interface and controls access to it. A lazy document proxy can exist before its stored document is loaded. On first read it obtains the real document, then delegates subsequent reads to it.
 
-## Guide outline
+> A proxy changes when or whether access occurs; document those differences rather than promising perfect transparency.
 
-- The problem and a plain-English explanation
-- At least three practical use cases
-- Pattern roles and a UML class diagram
-- A step-by-step Java 21 implementation
-- Runtime sequence and expected output
-- An extension exercise and behavior checks
-- Tradeoffs, alternatives, and reference links
+## The problem before the pattern
 
-## Related patterns
+Loading every report at startup may be unnecessary and expensive. Putting lazy checks throughout callers repeats lifecycle logic. A proxy lets callers keep using Document while one wrapper owns initialization policy.
 
-- [Decorator](../decorator/)
+## Practical use cases
+
+1. Virtual proxies that load expensive content on demand.
+2. Protection proxies that check authorization before access.
+3. Remote proxies that represent a service boundary.
+4. Access-control or caching wrappers with a deliberately preserved contract.
+
+## Structure and pattern roles
+
+<PatternDiagram {...{"id": "proxy-roles", "title": "Proxy role relationships", "description": "Document: Subject interface; StoredDocument: Real subject; LazyDocument: Proxy; Client: Consumer role. A proxy changes when or whether access occurs; document those differences rather than promising perfect transparency.", "nodes": [{"title": "Document", "role": "Subject interface", "detail": "read(): String"}, {"title": "StoredDocument", "role": "Real subject", "detail": "holds report content"}, {"title": "LazyDocument", "role": "Proxy", "detail": "loader, delegate, read()"}, {"title": "Client", "role": "Consumer role", "detail": "calls Document.read()"}], "edges": [{"to": 0, "label": "implements", "relation": "implements", "from": 1}, {"to": 0, "label": "implements", "relation": "implements", "from": 2}, {"to": 2, "label": "uses proxy", "relation": "uses", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+
+| Role | Java types | Responsibility |
+| --- | --- | --- |
+| Subject | Document | Common read contract. |
+| Real subject | StoredDocument | Provides already loaded content. |
+| Proxy | LazyDocument | Controls loading and delegates reads. |
+| Loader | Supplier of Document | Creates or loads the real subject when requested. |
+
+## Java walkthrough
+
+### 1. Preserve the subject contract
+
+Both document types implement read. Callers need not branch on whether loading has occurred.
+
+### 2. Accept a loader
+
+LazyDocument stores a Supplier and leaves its delegate empty at construction.
+
+### 3. Initialize on demand
+
+A synchronized read initializes exactly once after a successful load. A throwing or null-producing loader leaves the delegate empty.
+
+### 4. Delegate subsequent access
+
+Once initialized, read uses the same delegate. The monitor also serializes delegate reads in this intentionally simple design.
+
+The key collaboration is visible here (imports and surrounding types are in the complete listing):
+
+```java
+if (delegate == null) delegate = Objects.requireNonNull(loader.get(), "Loaded document");
+```
+
+## Runtime sequence
+
+<RuntimeSteps id="proxy-runtime" title="One concrete execution trace" steps={[{"label": "Construct proxy", "detail": "Loader is stored; no document is loaded yet."}, {"label": "First read", "detail": "Proxy invokes loader and retains the successful result."}, {"label": "Delegate", "detail": "Proxy returns the real document content."}, {"label": "Next read", "detail": "Proxy reuses the delegate without another load."}]} />
+
+## Complete runnable example
+
+This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+
+<a href={path('downloads/ProxyDemo.java')} download="ProxyDemo.java">Download ProxyDemo.java ↓</a>
+
+<SourceListing slug="proxy" prefix="Proxy" />
+
+### Compile and run
+
+From the repository root:
+
+```bash
+cd examples/proxy
+javac --release 21 ProxyDemo.java
+java ProxyDemo
+```
+
+Or run the single-file source directly:
+
+```bash
+java ProxyDemo.java
+```
+
+Expected output:
+
+```text
+Proxy ready
+Engineering report
+Engineering report
+```
+
+## Extension exercise
+
+Add a protection proxy requiring an authorization predicate, and decide whether permission is checked per access or only before loading. Test revoked access explicitly. Do not assume loading once means authorization remains valid forever.
+
+## Verification
+
+ProxyChecks.java verifies: No eager load, concurrent callers sharing one successful load, repeated reads, failed-load retry, and null loader/result rejection.
+
+```bash
+cd examples/proxy
+javac --release 21 ProxyDemo.java ProxyChecks.java
+java ProxyChecks
+```
+
+Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+
+## Tradeoffs and implementation limits
+
+| Concern | Design judgment |
+| --- | --- |
+| Transparency | Preserve results and meaningful exceptions even while changing access timing. |
+| Concurrency | Synchronized loading is simple but can serialize slow operations. |
+| Lifecycle | Define ownership, invalidation, refresh, and cleanup if the real subject owns resources. |
+
+This is a virtual proxy, not a remote client or security boundary. Reads hold a lock while loading and delegating, which is simple but can block callers. The loader must not recursively call this same proxy. Retry after failure is explicit policy, not exactly-once external execution.
+
+## Compare related patterns
+
+| Approach | Distinction |
+| --- | --- |
+| Decorator | Adds behavior to an existing component; Proxy primarily controls access or lifecycle. |
+| Adapter | Translates into a different contract; Proxy preserves the subject interface. |
+
+<a href={path('patterns/decorator/')}> Decorator guide →</a> · <a href={path('patterns/adapter/')}> Adapter guide →</a> · <a href={path('patterns/singleton/')}> Singleton guide →</a>
+
+## Quick reference
+
+- **Intent:** Control access to another object.
+- **Recognize it:** Loading every report at startup may be unnecessary and expensive.
+- **Key collaboration:** LazyDocument stores a Supplier and leaves its delegate empty at construction..
+- **Ask first:** A proxy changes when or whether access occurs; document those differences rather than promising perfect transparency.
+
+## References
+
+- [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Proxy chapter.
+- [Oracle Java 21 — Supplier](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/function/Supplier.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Refactoring.Guru — Proxy](https://refactoring.guru/design-patterns/proxy). Illustrated secondary explanation and comparisons.
+
+The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

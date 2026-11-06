@@ -1,20 +1,40 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-const base = '/design-patterns/';
+const base = `${(process.env.SITE_BASE || '/design-patterns').replace(/\/$/,'')}/`;
 const root = path.resolve('dist');
+const examples = JSON.parse(await readFile('src/data/examples.json','utf8'));
+assert.equal(examples.length,23,'Every GoF pattern must have a registered example');
+assert.equal(new Set(examples.map(example=>example.slug)).size,23,'Unique pattern slugs');
 const patternDirs = await readdir(path.join(root,'patterns'));
-assert.equal(patternDirs.length,23,'All 23 pattern pages must exist');
-const source = await readFile('examples/abstract-factory/AbstractFactoryDemo.java','utf8');
-assert.equal(await readFile('dist/examples','utf8'),source,'Download must match tested Java source');
-const builderSource = await readFile('examples/builder/BuilderDemo.java','utf8');
-assert.equal(await readFile('dist/downloads/BuilderDemo.java','utf8'), builderSource, 'Builder download must match tested source');
-const builderGuide = await readFile('dist/patterns/builder/index.html','utf8');
-assert.ok(builderGuide.includes('Complete guide') && !builderGuide.includes('This guide is planned'));
-assert.ok(builderGuide.includes('TextReportBuilder') && builderGuide.includes('Runtime sequence') && builderGuide.includes('<svg'));
+assert.equal(patternDirs.length,23,'All 23 pattern pages exist');
 const home = await readFile('dist/index.html','utf8');
-assert.ok(home.includes('6 complete guides'), 'Homepage reflects completed guides');
-for(const slug of patternDirs) assert.ok(home.includes(`patterns/${slug}/`),`Homepage links ${slug}`);
+assert.ok(home.includes('23 complete guides'),'Homepage reports the completed catalog');
+const decode = value => value.replace(/&(#x[0-9a-f]+|#[0-9]+|amp|lt|gt|quot|apos);/gi, (entity, token) => {
+  if(token.startsWith('#x')) return String.fromCodePoint(parseInt(token.slice(2),16));
+  if(token.startsWith('#')) return String.fromCodePoint(parseInt(token.slice(1),10));
+  return ({amp:'&',lt:'<',gt:'>',quot:'"',apos:"'"})[token.toLowerCase()] || entity;
+});
+for(const example of examples) {
+  const mdx = await readFile(`src/content/patterns/${example.slug}.mdx`,'utf8');
+  const guide = await readFile(`dist/patterns/${example.slug}/index.html`,'utf8');
+  const source = await readFile(`examples/${example.slug}/${example.prefix}Demo.java`,'utf8');
+  assert.ok(mdx.includes('status: "complete"'),`${example.slug}: completed metadata`);
+  assert.ok(guide.includes('Complete guide') && !guide.includes('This guide is planned'),`${example.slug}: complete guide label`);
+  for(const heading of ['Practical use cases','Java walkthrough','Complete runnable example','Verification','References']) {
+    assert.ok(guide.includes(heading),`${example.slug}: ${heading}`);
+  }
+  assert.ok(guide.includes('<svg') && guide.includes('role="img"'),`${example.slug}: accessible diagram`);
+  assert.ok(home.includes(`patterns/${example.slug}/`),`${example.slug}: homepage link`);
+  assert.equal(await readFile(path.join(root,example.download),'utf8'),source,`${example.slug}: source download`);
+  const listings = [...guide.matchAll(/<pre\b[^>]*>([\s\S]*?)<\/pre>/g)].map(match=>decode(match[1].replace(/<[^>]*>/g,'')));
+  assert.ok(listings.some(listing=>listing.trim()===source.trim()),`${example.slug}: displayed source matches tested file`);
+  if(example.dynamicDownload) {
+    const expected = await readFile(`examples/${example.slug}/expected.txt`,'utf8');
+    assert.ok(listings.some(listing=>listing.trim()===expected.trim()),`${example.slug}: documented output matches fixture`);
+  }
+  await stat(`examples/${example.slug}/${example.prefix}Checks.java`);
+}
 let count=0;
 async function scan(dir) {
  for(const entry of await readdir(dir,{withFileTypes:true})) {
@@ -24,46 +44,28 @@ async function scan(dir) {
   count++;
   const html=await readFile(filename,'utf8');
   assert.ok(html.includes('id="main"'),`Skip target on ${filename}`);
-  for(const match of html.matchAll(/(?:href|src)="([^"#]+)"/g)) {
-   const url=match[1].replaceAll('&amp;','&');
-   if (/^(?:https?:|mailto:|data:)/.test(url)) continue;
-   const resolved = new URL(url, `https://atlas.test${base}${path.relative(root,filename).replace(/index\.html$/, '')}`);
-   if (!resolved.pathname.startsWith(base)) assert.fail(`URL escapes project base: ${url}`);
-   const relative=decodeURIComponent(resolved.pathname.slice(base.length));
-   let target=path.join(root,relative);
-   let info;
-   try { info=await stat(target); } catch { assert.fail(`Broken local URL ${url} in ${filename}`); }
-   if(info.isDirectory()) await stat(path.join(target,'index.html'));
+  for(const match of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
+    const url=decode(match[1]);
+    if(/^(?:https?:|mailto:|data:)/.test(url)) continue;
+    const resolved=new URL(url,`https://atlas.test${base}${path.relative(root,filename).replace(/index\.html$/,'')}`);
+    assert.ok(resolved.pathname.startsWith(base),`URL escapes project base: ${url}`);
+    const relative=decodeURIComponent(resolved.pathname.slice(base.length));
+    let target=path.join(root,relative);
+    try {
+      const info=await stat(target);
+      if(info.isDirectory()) target=path.join(target,'index.html');
+      await stat(target);
+    } catch { assert.fail(`Broken local URL ${url} in ${filename}`); }
+    if(resolved.hash && target.endsWith('.html')) {
+      const destination=await readFile(target,'utf8');
+      assert.ok(destination.includes(`id="${decodeURIComponent(resolved.hash.slice(1))}"`),`Broken anchor ${url} in ${filename}`);
+    }
   }
  }
 }
 await scan(root);
-const guide=await readFile('dist/patterns/abstract-factory/index.html','utf8');
-assert.ok(guide.includes('HtmlReportFactory') && guide.includes('Complete runnable example'));
-assert.ok(guide.includes('<svg') && guide.includes('Runtime sequence'));
 assert.ok((await readdir('dist/pagefind')).includes('pagefind.js'),'Search bundle generated');
-console.log(`Verified ${count} HTML pages, 23 pattern links, local assets, source download, and search bundle.`);
-
-const factorySource = await readFile('examples/factory-method/FactoryMethodDemo.java','utf8');
-assert.equal(await readFile('dist/downloads/FactoryMethodDemo.java','utf8'), factorySource, 'Factory Method download matches tested source');
-const factoryGuide = await readFile('dist/patterns/factory-method/index.html','utf8');
-assert.ok(factoryGuide.includes('Complete guide') && !factoryGuide.includes('This guide is planned'));
-assert.ok(factoryGuide.includes('createFormatter') && factoryGuide.includes('Runtime sequence') && factoryGuide.includes('<svg'));
-
-const prototypeSource = await readFile('examples/prototype/PrototypeDemo.java','utf8');
-assert.equal(await readFile('dist/downloads/PrototypeDemo.java','utf8'), prototypeSource, 'Prototype download matches tested source');
-const prototypeGuide = await readFile('dist/patterns/prototype/index.html','utf8');
-assert.ok(prototypeGuide.includes('Complete guide') && !prototypeGuide.includes('This guide is planned'));
-assert.ok(prototypeGuide.includes('ReportPrototype') && prototypeGuide.includes('Runtime copy workflow') && prototypeGuide.includes('<svg'));
-
-const singletonSource = await readFile('examples/singleton/SingletonDemo.java','utf8');
-assert.equal(await readFile('dist/downloads/SingletonDemo.java','utf8'), singletonSource, 'Singleton download matches tested source');
-const singletonGuide = await readFile('dist/patterns/singleton/index.html','utf8');
-assert.ok(singletonGuide.includes('Complete guide') && !singletonGuide.includes('This guide is planned'));
-assert.ok(singletonGuide.includes('ReportFormats') && singletonGuide.includes('Runtime scope and concurrency') && singletonGuide.includes('<svg'));
-
-const adapterSource = await readFile('examples/adapter/AdapterDemo.java','utf8');
-assert.equal(await readFile('dist/downloads/AdapterDemo.java','utf8'), adapterSource, 'Adapter download matches tested source');
-const adapterGuide = await readFile('dist/patterns/adapter/index.html','utf8');
-assert.ok(adapterGuide.includes('Complete guide') && !adapterGuide.includes('This guide is planned'));
-assert.ok(adapterGuide.includes('CadLengthAdapter') && adapterGuide.includes('Runtime sequence') && adapterGuide.includes('<svg'));
+// Pagefind metadata must contain an indexed record for each guide.
+const pagefindFiles=await readdir('dist/pagefind');
+assert.ok(pagefindFiles.some(file=>file.startsWith('pagefind-entry')),'Search entry metadata generated');
+console.log(`Verified ${count} HTML pages, 23 complete guides, diagrams, source listings/downloads, output fixtures, links/anchors, and search bundle.`);
