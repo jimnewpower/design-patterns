@@ -36,6 +36,9 @@ jobs:
           - pattern: factory-method
             demo: FactoryMethodDemo
             checks: FactoryMethodChecks
+          - pattern: prototype
+            demo: PrototypeDemo
+            checks: PrototypeChecks
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -47,5 +50,9 @@ jobs:
         run: |
           javac --release 21 ${{ matrix.demo }}.java ${{ matrix.checks }}.java
           java ${{ matrix.checks }}
-          java ${{ matrix.demo }} text
-          java ${{ matrix.demo }} html
+          if [ "${{ matrix.pattern }}" = "prototype" ]; then
+            java ${{ matrix.demo }}
+          else
+            java ${{ matrix.demo }} text
+            java ${{ matrix.demo }} html
+          fi

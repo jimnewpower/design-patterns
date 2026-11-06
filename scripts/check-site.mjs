@@ -13,7 +13,7 @@ const builderGuide = await readFile('dist/patterns/builder/index.html','utf8');
 assert.ok(builderGuide.includes('Complete guide') && !builderGuide.includes('This guide is planned'));
 assert.ok(builderGuide.includes('TextReportBuilder') && builderGuide.includes('Runtime sequence') && builderGuide.includes('<svg'));
 const home = await readFile('dist/index.html','utf8');
-assert.ok(home.includes('3 complete guides'), 'Homepage reflects completed guides');
+assert.ok(home.includes('4 complete guides'), 'Homepage reflects completed guides');
 for(const slug of patternDirs) assert.ok(home.includes(`patterns/${slug}/`),`Homepage links ${slug}`);
 let count=0;
 async function scan(dir) {
@@ -49,3 +49,9 @@ assert.equal(await readFile('dist/downloads/FactoryMethodDemo.java','utf8'), fac
 const factoryGuide = await readFile('dist/patterns/factory-method/index.html','utf8');
 assert.ok(factoryGuide.includes('Complete guide') && !factoryGuide.includes('This guide is planned'));
 assert.ok(factoryGuide.includes('createFormatter') && factoryGuide.includes('Runtime sequence') && factoryGuide.includes('<svg'));
+
+const prototypeSource = await readFile('examples/prototype/PrototypeDemo.java','utf8');
+assert.equal(await readFile('dist/downloads/PrototypeDemo.java','utf8'), prototypeSource, 'Prototype download matches tested source');
+const prototypeGuide = await readFile('dist/patterns/prototype/index.html','utf8');
+assert.ok(prototypeGuide.includes('Complete guide') && !prototypeGuide.includes('This guide is planned'));
+assert.ok(prototypeGuide.includes('ReportPrototype') && prototypeGuide.includes('Runtime copy workflow') && prototypeGuide.includes('<svg'));
