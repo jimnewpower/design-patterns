@@ -7,7 +7,13 @@ const patternDirs = await readdir(path.join(root,'patterns'));
 assert.equal(patternDirs.length,23,'All 23 pattern pages must exist');
 const source = await readFile('examples/abstract-factory/AbstractFactoryDemo.java','utf8');
 assert.equal(await readFile('dist/examples','utf8'),source,'Download must match tested Java source');
+const builderSource = await readFile('examples/builder/BuilderDemo.java','utf8');
+assert.equal(await readFile('dist/downloads/BuilderDemo.java','utf8'), builderSource, 'Builder download must match tested source');
+const builderGuide = await readFile('dist/patterns/builder/index.html','utf8');
+assert.ok(builderGuide.includes('Complete guide') && !builderGuide.includes('This guide is planned'));
+assert.ok(builderGuide.includes('TextReportBuilder') && builderGuide.includes('Runtime sequence') && builderGuide.includes('<svg'));
 const home = await readFile('dist/index.html','utf8');
+assert.ok(home.includes('2 complete guides'), 'Homepage reflects completed guides');
 for(const slug of patternDirs) assert.ok(home.includes(`patterns/${slug}/`),`Homepage links ${slug}`);
 let count=0;
 async function scan(dir) {

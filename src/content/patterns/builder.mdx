@@ -2,28 +2,300 @@
 title: "Builder"
 category: "Creational"
 order: 2
-intent: "Construct a complex object step by step."
-keywords: ["construction", "steps", "immutable"]
-status: "planned"
-related: ["abstract-factory"]
+intent: "Construct a complex object step by step, separating the construction process from its representation."
+keywords: ["construction", "steps", "immutable", "director", "fluent", "telescoping constructors", "report"]
+status: "complete"
+related: ["abstract-factory", "factory-method", "prototype"]
 ---
 
-> This guide is planned. The intent below is available now; the implementation walkthrough is still to come.
+import BuilderSource from '../../components/BuilderSource.astro';
+import BuilderDiagrams from '../../components/BuilderDiagrams.astro';
+import { path } from '../../data/navigation';
 
-## Intent
+## The idea in plain English
 
-Construct a complex object step by step.
+A **Builder collects or performs the steps needed to create a finished product**. Calling code describes what to build through meaningful operations, while the builder handles how those choices become the result.
 
-## Guide outline
+Think of producing an engineering report: set its title, supply the tools, then request the finished report. The same recipe can produce plain text or HTML by using a different builder.
 
-- The problem and a plain-English explanation
-- At least three practical use cases
-- Pattern roles and a UML class diagram
-- A step-by-step Java 21 implementation
-- Runtime sequence and expected output
-- An extension exercise and behavior checks
-- Tradeoffs, alternatives, and reference links
+The original GoF pattern separates the construction process from the representation. A **director** can hold a reusable recipe; concrete builders carry out the steps for their respective representations. A director is optional when the caller can express the recipe clearly itself.
 
-## Related patterns
+> Choose Builder when construction has meaningful steps, optional choices, or repeatable recipes. With a simple object and two obvious parameters, a constructor is usually enough.
 
-- [Abstract Factory](../abstract-factory/)
+## The problem before the pattern
+
+Consider a constructor that grows as report options accumulate:
+
+```java
+// Illustrative API: the booleans obscure the caller's intent.
+Report report = new Report(title, tools, true, false, true, "html");
+```
+
+Overloaded constructors can help at first, but combinations multiply. Setters avoid a long argument list, yet can expose an incomplete object to other code. Format decisions mixed into the assembly logic add another source of change.
+
+A builder gives construction a place of its own. The caller uses named steps, and `build()` checks that required information exists before returning a product. Builder does not automatically guarantee validity, immutability, or thread safety; the implementation must define those properties.
+
+## Practical use cases
+
+1. **Report or document assembly:** execute a shared recipe while builders produce HTML, text, or another representation.
+2. **HTTP requests:** configure a URI, headers, method, and body before creating an immutable request.
+3. **Simulation configuration:** choose model inputs, solver settings, and output options, then validate combinations before a run begins.
+4. **Test fixtures:** give tests clear defaults and named overrides when a domain object has many meaningful options.
+
+The first case illustrates interchangeable concrete builders. The other cases often use a single fluent builder without a separate director.
+
+## Structure and pattern roles
+
+<BuilderDiagrams kind="structure" />
+
+| GoF role | Java type | Responsibility |
+| --- | --- | --- |
+| Builder | `ReportBuilder` | Define steps and product retrieval; share validation and construction state. |
+| Concrete Builders | `TextReportBuilder`, `HtmlReportBuilder` | Produce a specific report representation. |
+| Director | `ReportDirector` | Express the engineering-report recipe without format decisions. |
+| Product | `String` | Hold the completed text report or HTML fragment. |
+| Client | `BuilderDemo.main` | Choose a builder, invoke the recipe, and retrieve the product. |
+
+Here the Builder is an abstract class rather than an interface because both builders share the same input state and validation. The two products have the same Java type but different representations. GoF builders can also produce different product types; a universal product interface is not required by the pattern.
+
+## Java walkthrough
+
+### 1. Define construction steps
+
+The shared builder stores a required title and an optional tool list:
+
+```java
+abstract static class ReportBuilder {
+    private String title;
+    private List<String> tools = List.of();
+
+    public final ReportBuilder title(String title) {
+        Objects.requireNonNull(title, "title");
+        if (title.isBlank()) throw new IllegalArgumentException("Title must not be blank");
+        this.title = title;
+        return this;
+    }
+
+    public final ReportBuilder tools(List<String> tools) {
+        this.tools = List.copyOf(tools);
+        return this;
+    }
+
+    public abstract String build();
+    // Protected accessors appear in the complete listing.
+}
+```
+
+Returning `this` permits chaining, but chaining is a convenience rather than the defining feature of Builder. `List.copyOf` captures the tool values at the time of the step, so later modifications to the caller’s list do not affect construction. Because the elements are strings, there is no mutable element state to copy. Null lists and null elements are rejected.
+
+### 2. Implement the representations
+
+The text builder creates an underlined title and a list. The HTML builder creates a heading and an unordered list, escaping text content.
+
+```java
+static final class TextReportBuilder extends ReportBuilder {
+    @Override
+    public String build() {
+        String title = title();
+        StringBuilder output = new StringBuilder(title)
+                .append("\n").append("=".repeat(title.length())).append("\n\nTools");
+        for (String tool : tools()) output.append("\n- ").append(tool);
+        return output.toString();
+    }
+}
+```
+
+The protected `title()` accessor throws `IllegalStateException` if no title was supplied. Both concrete builders call it before producing a result. The full listing includes the HTML implementation and both accessors.
+
+This small example defers rendering until `build()`: construction steps gather state, and the concrete builder translates it into a representation. A builder for a larger structure could construct internal parts during each step instead.
+
+### 3. Put a reusable recipe in the director
+
+```java
+static final class ReportDirector {
+    public void constructEngineeringReport(ReportBuilder builder) {
+        builder.title("Engineering Tools")
+               .tools(List.of("Cameo", "Windchill", "GitLab"));
+    }
+}
+```
+
+The director knows the recipe’s content and steps, but contains no HTML markup or concrete-builder references. It sets both fields each time so this recipe also works predictably with a reused builder.
+
+### 4. Choose the builder and retrieve the product
+
+```java
+ReportBuilder builder = new HtmlReportBuilder();
+new ReportDirector().constructEngineeringReport(builder);
+String report = builder.build();
+```
+
+Replace `HtmlReportBuilder` with `TextReportBuilder` to keep the recipe and change the representation. Startup selection still needs to choose a concrete class; the director does not take on that responsibility.
+
+### 5. Build directly when no recipe is needed
+
+```java
+String report = new TextReportBuilder()
+        .title("Integration Tools")
+        .tools(List.of("Cameo", "GitLab"))
+        .build();
+```
+
+This bypasses the director while preserving validation and representation logic. Introduce a director when a named recipe has enough reuse or complexity to justify it.
+
+## Runtime sequence
+
+<BuilderDiagrams kind="sequence" />
+
+The builder is mutable and not thread-safe. Each `build()` returns an immutable `String` snapshot without clearing construction state. Callers may change steps and build again; earlier products remain unchanged. Create a fresh builder when you need fresh defaults, since omitting a step on a reused builder preserves its previous value.
+
+## Complete runnable example
+
+This listing and its download come from the same Java source file checked by CI. The example targets **Java 21** and uses nested classes to remain runnable as one file.
+
+<a href={path('downloads/BuilderDemo.java')} download="BuilderDemo.java">Download BuilderDemo.java ↓</a>
+
+<BuilderSource />
+
+### Compile and run
+
+From the repository root:
+
+```bash
+cd examples/builder
+javac --release 21 BuilderDemo.java
+java BuilderDemo text
+java BuilderDemo html
+```
+
+Single-file source execution also works:
+
+```bash
+java BuilderDemo.java text
+```
+
+Text output:
+
+```text
+Engineering Tools
+=================
+
+Tools
+- Cameo
+- Windchill
+- GitLab
+```
+
+HTML output (a fragment, not a complete document):
+
+```html
+<h1>Engineering Tools</h1>
+<ul>
+  <li>Cameo</li>
+  <li>Windchill</li>
+  <li>GitLab</li>
+</ul>
+```
+
+The text renderer assumes simple single-line inputs. HTML escaping covers text nodes (`&`, `<`, `>`), not attributes or arbitrary HTML sanitization.
+
+## Fluent Java builders and the GoF pattern
+
+A typical Java API uses a nested builder for a single immutable product:
+
+```java
+HttpRequest request = HttpRequest.newBuilder()
+        .uri(URI.create("https://example.com/tools"))
+        .timeout(Duration.ofSeconds(10))
+        .header("Accept", "application/json")
+        .GET()
+        .build();
+```
+
+Imports for this independent example are `java.net.http.HttpRequest`, `java.net.URI`, and `java.time.Duration`. Constructing the request does not send it.
+
+This is a useful Java builder idiom: named configuration steps followed by product creation. It does not require a director or multiple representations. The GoF example above makes the separation between a recipe and its representations explicit. A fluent API alone does not establish that separation.
+
+For your own immutable products, keep the product constructor private or otherwise control creation, validate cross-field constraints at `build()`, and defensively copy mutable data. None of those safeguards comes from method chaining itself.
+
+## Extend it: add a Markdown builder
+
+Place this class inside `BuilderDemo`:
+
+```java
+static final class MarkdownReportBuilder extends ReportBuilder {
+    @Override
+    public String build() {
+        StringBuilder output = new StringBuilder("# ")
+                .append(title()).append("\n\nTools");
+        for (String tool : tools()) output.append("\n- ").append(tool);
+        return output.toString();
+    }
+}
+```
+
+Select it in `main` with a `markdown` case. The director and existing builders stay unchanged. This exercise assumes trusted, single-line Markdown text; production Markdown needs escaping rules.
+
+Next, add an optional footer step. Decide its default and whether each representation must render it. Adding a new step affects the builder contract and may require updating every concrete builder; a default no-op is only appropriate if silently omitting that part is acceptable.
+
+**Exercise:** add a second director recipe for a minimal report. If it accepts a reused builder, explicitly set an empty tool list. Verify that a previously populated list does not leak into the minimal recipe.
+
+## Verification
+
+`BuilderChecks.java` checks observable behavior:
+
+- Both representations from the same director recipe.
+- HTML escaping and empty optional lists.
+- Rejection of a missing title, blank title, null values, and an unsupported format.
+- Snapshot behavior when the caller later mutates its tool list.
+- Repeated builds and builder reuse without changing an earlier product.
+
+```bash
+cd examples/builder
+javac --release 21 BuilderDemo.java BuilderChecks.java
+java BuilderChecks
+```
+
+Failures throw `AssertionError`; the checks do not need `-ea`. The GitHub Actions Java matrix runs both the Builder and Abstract Factory examples on JDK 21.
+
+## Tradeoffs and common mistakes
+
+| Design choice | Benefit | Cost or responsibility |
+| --- | --- | --- |
+| Named steps | Clear intent at the call site | More types and methods than a simple constructor. |
+| Separate director | Reusable construction recipe | Extra indirection; unnecessary for a one-off sequence. |
+| Multiple concrete builders | Same recipe, different representations | New steps can affect every implementation. |
+| Mutable builder, immutable result | Flexible construction with stable products | Define reuse, defaults, copying, and concurrency explicitly. |
+
+Avoid exposing a partially built product, retaining mutable caller-owned collections, or forgetting validation in one concrete builder. Avoid sharing a builder between threads. Do not assume a reusable builder resets itself after `build()`; document and test the lifecycle.
+
+## Compare related approaches
+
+| Approach | Main question | Compared with Builder |
+| --- | --- | --- |
+| Abstract Factory | Which compatible family of collaborators should I create? | Supplies related products; Builder assembles a finished product through steps. |
+| Factory Method | Which product should a subclass instantiate? | Provides a creation hook rather than a construction recipe. |
+| Prototype | Can I start from a copy of an existing instance? | Reuses existing state rather than collecting construction choices. |
+| Constructor or static factory | Can this object be created clearly in one call? | Often preferable when construction is straightforward. |
+
+In the earlier report example, Abstract Factory supplies a heading renderer and a table renderer to a client. Here Builder delivers the report itself. The patterns can cooperate: a builder could use an Abstract Factory internally to obtain compatible components.
+
+<a href={path('patterns/abstract-factory/')}>Abstract Factory guide →</a> · <a href={path('patterns/factory-method/')}>Factory Method outline →</a> · <a href={path('patterns/prototype/')}>Prototype outline →</a>
+
+## Quick reference
+
+- **Intent:** separate construction steps from the representation.
+- **Recognize it:** staged assembly, many meaningful choices, or repeatable recipes.
+- **Builder:** owns construction state and product creation.
+- **Director:** optionally owns a reusable sequence of steps.
+- **Product:** is retrieved when construction is complete.
+- **Ask first:** would a constructor, record, or static factory express this clearly enough?
+
+## References
+
+- [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). The original GoF catalog; see Builder in the creational patterns.
+- [Oracle Java 21 — HttpRequest.Builder](https://docs.oracle.com/en/java/javase/21/docs/api/java.net.http/java/net/http/HttpRequest.Builder.html). A production Java fluent-builder API with documented mutation, reuse, and thread-safety behavior.
+- [Oracle Java 21 — List.copyOf](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/List.html#copyOf(java.util.Collection)). Unmodifiable list snapshots and their element constraints.
+- [Refactoring.Guru — Builder](https://refactoring.guru/design-patterns/builder). An illustrated secondary explanation of concrete builders and the optional director.
+
+The report example and explanations are original teaching material. Names and roles follow the GoF catalog.

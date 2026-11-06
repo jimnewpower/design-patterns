@@ -7,7 +7,8 @@ A searchable field guide to all 23 Gang of Four design patterns, with Java examp
 - Atlas homepage with the three categories and links to every pattern.
 - Field Guide layout with category navigation, table of contents, adjacent patterns, and print styles.
 - Complete Abstract Factory guide: problem, four use cases, class/sequence diagrams, Java walkthrough, runnable source, Markdown extension, verification, tradeoffs, and references.
-- Clearly labeled outlines for the other 22 guides.
+- Complete Builder guide: GoF builder/director roles, fluent Java idiom, two representations, diagrams, lifecycle rules, extension exercise, and behavior checks.
+- Clearly labeled outlines for the other 21 guides.
 - Full-text Pagefind search and a persistent light/dark toggle (light by default).
 
 ## Development
@@ -41,6 +42,18 @@ java AbstractFactoryDemo html
 ```
 
 The source listing and download are generated from `examples/abstract-factory/AbstractFactoryDemo.java`, so they remain synchronized. The example uses dependency-free behavior checks; no Maven installation is needed for this first guide.
+
+Builder checks:
+
+```sh
+cd examples/builder
+javac --release 21 BuilderDemo.java BuilderChecks.java
+java BuilderChecks
+java BuilderDemo text
+java BuilderDemo html
+```
+
+The Builder listing and download use `examples/builder/BuilderDemo.java` directly. CI runs both patterns in a Java 21 matrix.
 
 ## Content
 
