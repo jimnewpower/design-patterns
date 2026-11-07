@@ -69,3 +69,13 @@ assert.ok((await readdir('dist/pagefind')).includes('pagefind.js'),'Search bundl
 const pagefindFiles=await readdir('dist/pagefind');
 assert.ok(pagefindFiles.some(file=>file.startsWith('pagefind-entry')),'Search entry metadata generated');
 console.log(`Verified ${count} HTML pages, 23 complete guides, diagrams, source listings/downloads, output fixtures, links/anchors, and search bundle.`);
+
+const icons = JSON.parse(await readFile('src/data/pattern-icons.json','utf8'));
+assert.equal(Object.keys(icons).length,23,'One icon for each pattern');
+assert.equal(new Set(Object.values(icons).map(icon=>icon.markup)).size,23,'Distinct icon artwork');
+for(const {slug} of examples) {
+  const svg = await readFile(`dist/icons/${slug}.svg`,'utf8');
+  assert.ok(svg.includes(icons[slug].markup),`${slug}: SVG download matches icon source`);
+  assert.ok(svg.includes('viewBox="0 0 32 32"') && svg.includes('<desc'),`${slug}: SVG geometry and description`);
+}
+console.log('Verified 23 unique icon assets and their gallery download links.');
