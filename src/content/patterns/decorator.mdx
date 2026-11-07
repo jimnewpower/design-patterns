@@ -13,13 +13,13 @@ import PatternDiagram from '../../components/PatternDiagram.astro';
 import RuntimeSteps from '../../components/RuntimeSteps.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-Decorator adds behavior by wrapping an object behind the same interface. A basic report renders its body. A header decorator prepends a title, while a footer decorator appends a note. Clients can combine these at runtime and still use Report.
+Start with a report body, wrap it in a header, then wrap that in a footer. The result still behaves like a report: callers use `render()` without needing to know which wrappers are present.
 
-> A wrapper is not automatically a Decorator: identify the preserved interface and the added responsibility.
+That is Decorator. Each wrapper adds one piece of behavior and delegates the rest. It is useful when features need to combine without a subclass for every combination.
 
-## The problem before the pattern
+## Why use it
 
 Subclassing for every combination of headers, footers, formatting, and other features causes a proliferation of report types. A boolean-heavy report class concentrates unrelated options. Independent wrappers let each feature compose around the existing object.
 
@@ -32,7 +32,7 @@ Subclassing for every combination of headers, footers, formatting, and other fea
 
 ## Structure and pattern roles
 
-<PatternDiagram {...{"id": "decorator-roles", "title": "Decorator role relationships", "description": "Report: Component interface; PlainReport: Concrete component; ReportDecorator: Abstract decorator; Header: Concrete decorator. A wrapper is not automatically a Decorator: identify the preserved interface and the added responsibility.", "nodes": [{"title": "Report", "role": "Component interface", "detail": "render(): String"}, {"title": "PlainReport", "role": "Concrete component", "detail": "returns body"}, {"title": "ReportDecorator", "role": "Abstract decorator", "detail": "wrapped: Report"}, {"title": "Header", "role": "Concrete decorator", "detail": "prepends title"}], "edges": [{"to": 0, "label": "implements", "relation": "implements", "from": 1}, {"to": 0, "label": "implements", "relation": "implements", "from": 2}, {"to": 2, "label": "extends", "relation": "extends", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+<PatternDiagram {...{"id": "decorator-roles", "title": "Decorator role relationships", "description": "Report is the component interface. PlainReport is the concrete component. ReportDecorator is the abstract decorator. Header is the concrete decorator.", "nodes": [{"title": "Report", "role": "Component interface", "detail": "render(): String"}, {"title": "PlainReport", "role": "Concrete component", "detail": "returns body"}, {"title": "ReportDecorator", "role": "Abstract decorator", "detail": "wrapped: Report"}, {"title": "Header", "role": "Concrete decorator", "detail": "prepends title"}], "edges": [{"to": 0, "label": "implements", "relation": "implements", "from": 1}, {"to": 0, "label": "implements", "relation": "implements", "from": 2}, {"to": 2, "label": "extends", "relation": "extends", "from": 3}], "caption": "A decorator is itself a Report and wraps another Report, which may also be a decorator."}} />
 
 | Role | Java types | Responsibility |
 | --- | --- | --- |
@@ -43,23 +43,23 @@ Subclassing for every combination of headers, footers, formatting, and other fea
 
 ## Java walkthrough
 
-### 1. Keep one component contract
+### 1. Start with the component contract
 
-Report exposes render. Both core objects and decorators satisfy it.
+`Report` has one method, `render()`. A plain report and every decorator implement it, so a wrapper can hold either kind of object.
 
-### 2. Store a wrapped component
+### 2. Store the object being wrapped
 
-ReportDecorator validates and stores its delegate. It does not demand a PlainReport, so decorators can wrap other decorators.
+`ReportDecorator` keeps a non-null `Report` reference. It deliberately does not require a `PlainReport`; that would prevent stacking decorators.
 
-### 3. Add one responsibility
+### 3. Add a header or footer
 
-Header prepends its title; Footer appends its note. Each calls wrapped.render exactly once.
+`Header` prepends its title, and `Footer` appends its note. Each delegates to the wrapped report once. The original body is unchanged.
 
-### 4. Compose at startup
+### 4. Build the wrapper chain
 
-Build Footer(Header(PlainReport)) to choose the desired features without another combined subclass.
+The demo constructs a footer around a header around a plain body. Reading that construction shows which features are present.
 
-The key collaboration is visible here (imports and surrounding types are in the complete listing):
+For example:
 
 ```java
 return title + "\n" + wrapped.render();
@@ -67,11 +67,11 @@ return title + "\n" + wrapped.render();
 
 ## Runtime sequence
 
-<RuntimeSteps id="decorator-runtime" title="One concrete execution trace" steps={[{"label": "Enter outer wrapper", "detail": "Client calls render on Footer."}, {"label": "Delegate inward", "detail": "Footer requests content from Header."}, {"label": "Reach component", "detail": "Header renders PlainReport and prepends its title."}, {"label": "Unwind wrappers", "detail": "Footer appends the note and returns the finished text."}]} />
+<RuntimeSteps id="decorator-runtime" title="Rendering the header, body, and footer" steps={[{"label": "Enter outer wrapper", "detail": "Client calls render on Footer."}, {"label": "Delegate inward", "detail": "Footer requests content from Header."}, {"label": "Reach component", "detail": "Header renders PlainReport and prepends its title."}, {"label": "Unwind wrappers", "detail": "Footer appends the note and returns the finished text."}]} />
 
 ## Complete runnable example
 
-This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+Save this as `DecoratorDemo.java` and use Java 21 or later.
 
 <a href={path('downloads/DecoratorDemo.java')} download="DecoratorDemo.java">Download DecoratorDemo.java ↓</a>
 
@@ -107,7 +107,7 @@ Add a LineNumbered decorator and apply it inside and outside Header. Compare the
 
 ## Verification
 
-DecoratorChecks.java verifies: Composed rendering, repeated headers and footers, wrapper ordering, preservation of the original body, and null dependencies.
+`DecoratorChecks.java` covers composed rendering, repeated headers and footers, wrapper ordering, preservation of the original body, and null dependencies.
 
 ```bash
 cd examples/decorator
@@ -115,11 +115,11 @@ javac --release 21 DecoratorDemo.java DecoratorChecks.java
 java DecoratorChecks
 ```
 
-Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+The checks throw `AssertionError` on failure. The console output is also checked against `expected.txt`.
 
-## Tradeoffs and implementation limits
+## Tradeoffs
 
-| Concern | Design judgment |
+| Decision | What to consider |
 | --- | --- |
 | Runtime composition | Features combine flexibly but a long wrapper chain can be difficult to inspect. |
 | Same interface | Preserve the component contract, including errors and lifecycle behavior. |
@@ -127,7 +127,7 @@ Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the d
 
 Text is rendered synchronously with no escaping or layout engine. Header and footer happen to commute with each other in this small example; decorators in general do not. Wrapping resource-owning services also requires explicit close and error semantics.
 
-## Compare related patterns
+## Related patterns
 
 | Approach | Distinction |
 | --- | --- |
@@ -136,17 +136,12 @@ Text is rendered synchronously with no escaping or layout engine. Header and foo
 
 <a href={path('patterns/adapter/')}> Adapter guide →</a> · <a href={path('patterns/proxy/')}> Proxy guide →</a> · <a href={path('patterns/composite/')}> Composite guide →</a>
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** Add behavior by wrapping an object.
-- **Recognize it:** Subclassing for every combination of headers, footers, formatting, and other features causes a proliferation of report types.
-- **Key collaboration:** ReportDecorator validates and stores its delegate.
-- **Ask first:** A wrapper is not automatically a Decorator: identify the preserved interface and the added responsibility.
+This is a good fit for features that need to combine independently around one stable contract. Keep the wrappers small. As chains grow, give their construction a readable home and test the order-sensitive combinations.
 
 ## References
 
 - [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Decorator chapter.
-- [Oracle Java 21 — FilterInputStream](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/io/FilterInputStream.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Oracle Java 21 — FilterInputStream](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/io/FilterInputStream.html). A standard-library example of wrapping a stream behind the same interface.
 - [Refactoring.Guru — Decorator](https://refactoring.guru/design-patterns/decorator). Illustrated secondary explanation and comparisons.
-
-The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

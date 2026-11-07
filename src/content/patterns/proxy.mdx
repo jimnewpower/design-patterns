@@ -13,13 +13,13 @@ import PatternDiagram from '../../components/PatternDiagram.astro';
 import RuntimeSteps from '../../components/RuntimeSteps.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-Proxy stands in for another object behind the same interface and controls access to it. A lazy document proxy can exist before its stored document is loaded. On first read it obtains the real document, then delegates subsequent reads to it.
+A report can appear in a catalog before anyone opens its content. Loading every document immediately would do work that many users never need.
 
-> A proxy changes when or whether access occurs; document those differences rather than promising perfect transparency.
+A lazy proxy implements the same `Document` interface as the loaded document. It loads the real object on the first read, then delegates later reads to it. Callers keep using `read()`; the proxy owns the loading decision.
 
-## The problem before the pattern
+## Why use it
 
 Loading every report at startup may be unnecessary and expensive. Putting lazy checks throughout callers repeats lifecycle logic. A proxy lets callers keep using Document while one wrapper owns initialization policy.
 
@@ -32,7 +32,7 @@ Loading every report at startup may be unnecessary and expensive. Putting lazy c
 
 ## Structure and pattern roles
 
-<PatternDiagram {...{"id": "proxy-roles", "title": "Proxy role relationships", "description": "Document: Subject interface; StoredDocument: Real subject; LazyDocument: Proxy; Client: Consumer role. A proxy changes when or whether access occurs; document those differences rather than promising perfect transparency.", "nodes": [{"title": "Document", "role": "Subject interface", "detail": "read(): String"}, {"title": "StoredDocument", "role": "Real subject", "detail": "holds report content"}, {"title": "LazyDocument", "role": "Proxy", "detail": "loader, delegate, read()"}, {"title": "Client", "role": "Consumer role", "detail": "calls Document.read()"}], "edges": [{"to": 0, "label": "implements", "relation": "implements", "from": 1}, {"to": 0, "label": "implements", "relation": "implements", "from": 2}, {"to": 2, "label": "uses proxy", "relation": "uses", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+<PatternDiagram {...{"id": "proxy-roles", "title": "Proxy role relationships", "description": "Document is the subject interface. StoredDocument is the real subject. LazyDocument is the proxy. Client is the consumer role.", "nodes": [{"title": "Document", "role": "Subject interface", "detail": "read(): String"}, {"title": "StoredDocument", "role": "Real subject", "detail": "holds report content"}, {"title": "LazyDocument", "role": "Proxy", "detail": "loader, delegate, read()"}, {"title": "Client", "role": "Consumer role", "detail": "calls Document.read()"}], "edges": [{"to": 0, "label": "implements", "relation": "implements", "from": 1}, {"to": 0, "label": "implements", "relation": "implements", "from": 2}, {"to": 2, "label": "uses proxy", "relation": "uses", "from": 3}], "caption": "Client code uses Document. LazyDocument controls when the StoredDocument is loaded."}} />
 
 | Role | Java types | Responsibility |
 | --- | --- | --- |
@@ -43,23 +43,23 @@ Loading every report at startup may be unnecessary and expensive. Putting lazy c
 
 ## Java walkthrough
 
-### 1. Preserve the subject contract
+### 1. Use the same interface on both sides
 
-Both document types implement read. Callers need not branch on whether loading has occurred.
+`StoredDocument` and `LazyDocument` both implement `Document.read()`. The client can hold either one.
 
-### 2. Accept a loader
+### 2. Defer the work
 
-LazyDocument stores a Supplier and leaves its delegate empty at construction.
+The proxy constructor stores a loader. It does not call it, so creating the proxy does not load document content.
 
-### 3. Initialize on demand
+### 3. Load on the first read
 
-A synchronized read initializes exactly once after a successful load. A throwing or null-producing loader leaves the delegate empty.
+`read()` is synchronized. A successful load fills the delegate field; a thrown exception or null result leaves it empty so a later read can try again.
 
-### 4. Delegate subsequent access
+### 4. Reuse the loaded document
 
-Once initialized, read uses the same delegate. The monitor also serializes delegate reads in this intentionally simple design.
+Later reads delegate to the stored object. The lock also serializes those reads, which keeps this implementation simple but may limit throughput for a slow delegate.
 
-The key collaboration is visible here (imports and surrounding types are in the complete listing):
+For example:
 
 ```java
 if (delegate == null) delegate = Objects.requireNonNull(loader.get(), "Loaded document");
@@ -67,11 +67,11 @@ if (delegate == null) delegate = Objects.requireNonNull(loader.get(), "Loaded do
 
 ## Runtime sequence
 
-<RuntimeSteps id="proxy-runtime" title="One concrete execution trace" steps={[{"label": "Construct proxy", "detail": "Loader is stored; no document is loaded yet."}, {"label": "First read", "detail": "Proxy invokes loader and retains the successful result."}, {"label": "Delegate", "detail": "Proxy returns the real document content."}, {"label": "Next read", "detail": "Proxy reuses the delegate without another load."}]} />
+<RuntimeSteps id="proxy-runtime" title="The first and second document reads" steps={[{"label": "Construct proxy", "detail": "Loader is stored; no document is loaded yet."}, {"label": "First read", "detail": "Proxy invokes loader and retains the successful result."}, {"label": "Delegate", "detail": "Proxy returns the real document content."}, {"label": "Next read", "detail": "Proxy reuses the delegate without another load."}]} />
 
 ## Complete runnable example
 
-This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+Save this as `ProxyDemo.java` and use Java 21 or later.
 
 <a href={path('downloads/ProxyDemo.java')} download="ProxyDemo.java">Download ProxyDemo.java ↓</a>
 
@@ -107,7 +107,7 @@ Add a protection proxy requiring an authorization predicate, and decide whether 
 
 ## Verification
 
-ProxyChecks.java verifies: No eager load, concurrent callers sharing one successful load, repeated reads, failed-load retry, and null loader/result rejection.
+`ProxyChecks.java` covers no eager load, concurrent callers sharing one successful load, repeated reads, failed-load retry, and null loader/result rejection.
 
 ```bash
 cd examples/proxy
@@ -115,11 +115,11 @@ javac --release 21 ProxyDemo.java ProxyChecks.java
 java ProxyChecks
 ```
 
-Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+The checks throw `AssertionError` on failure. The console output is also checked against `expected.txt`.
 
-## Tradeoffs and implementation limits
+## Tradeoffs
 
-| Concern | Design judgment |
+| Decision | What to consider |
 | --- | --- |
 | Transparency | Preserve results and meaningful exceptions even while changing access timing. |
 | Concurrency | Synchronized loading is simple but can serialize slow operations. |
@@ -127,7 +127,7 @@ Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the d
 
 This is a virtual proxy, not a remote client or security boundary. Reads hold a lock while loading and delegating, which is simple but can block callers. The loader must not recursively call this same proxy. Retry after failure is explicit policy, not exactly-once external execution.
 
-## Compare related patterns
+## Related patterns
 
 | Approach | Distinction |
 | --- | --- |
@@ -136,17 +136,12 @@ This is a virtual proxy, not a remote client or security boundary. Reads hold a 
 
 <a href={path('patterns/decorator/')}> Decorator guide →</a> · <a href={path('patterns/adapter/')}> Adapter guide →</a> · <a href={path('patterns/singleton/')}> Singleton guide →</a>
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** Control access to another object.
-- **Recognize it:** Loading every report at startup may be unnecessary and expensive.
-- **Key collaboration:** LazyDocument stores a Supplier and leaves its delegate empty at construction..
-- **Ask first:** A proxy changes when or whether access occurs; document those differences rather than promising perfect transparency.
+Use a proxy when loading, authorization, remote access, or another access policy should be handled in one place. Document the timing and failure behavior callers will notice. A lazy proxy that retries failed loads has a different contract from one that caches the failure.
 
 ## References
 
 - [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Proxy chapter.
-- [Oracle Java 21 — Supplier](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/function/Supplier.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Oracle Java 21 — Supplier](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/function/Supplier.html). The loader contract; suppliers need not return a fresh object on every call.
 - [Refactoring.Guru — Proxy](https://refactoring.guru/design-patterns/proxy). Illustrated secondary explanation and comparisons.
-
-The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

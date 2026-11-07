@@ -12,17 +12,13 @@ import PrototypeSource from '../../components/PrototypeSource.astro';
 import PrototypeDiagrams from '../../components/PrototypeDiagrams.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-**Prototype creates a new object by asking an existing object to copy itself.** The existing object already contains useful configuration. The client requests a copy through a common contract and customizes the result without rebuilding every detail.
+Suppose an engineering report already has the right tools and footer settings. To make a software report, start with a copy, rename it, and add GitLab. Rebuilding all of those settings at every call site would be tedious and easy to get wrong.
 
-Imagine an engineering-report template with a title, a tool list, and footer settings. Copy that template to begin a software report, then change its title, add GitLab, and update the footer. The original should keep its own values.
+Prototype gives the configured object a `copy()` method. The caller asks for a copy through an interface; the object handles its own fields. The copy policy needs to account for the mutable objects inside it.
 
-The concrete prototype knows how to copy its internal state. The copying client does not need to know its constructors or the details of its nested objects.
-
-> Choose Prototype when configured instances are natural starting points and a well-defined copy operation is simpler than reconstructing them.
-
-## The problem before the pattern
+## Why use it
 
 A client could reconstruct a report by reading all its fields:
 
@@ -73,7 +69,7 @@ A registry is optional; `original.copy()` is sufficient when the client already 
 | Nested `Layout` | Allocate a new object | Changing a footer must not affect the source. |
 | Registry entry | Copy on registration and retrieval | Protect the stored baseline from caller edits. |
 
-A **shallow copy** creates a new outer object but retains references to nested objects. A **deep copy** also duplicates the relevant mutable objects reachable from it. Copy depth is a domain policy, not a promise to blindly clone everything.
+A shallow copy creates a new outer object but keeps its nested references. A deep copy also duplicates the mutable objects that need independent ownership. The right depth depends on what callers expect to change independently.
 
 This example copies all owned mutable state. Its list elements and footer value are strings, so they can safely be shared. Replacing strings with mutable tool objects would require revisiting that policy.
 
@@ -139,9 +135,9 @@ public ReportPrototype create(String name) {
 }
 ```
 
-Copying during registration prevents later edits to the supplied object from changing the saved baseline. Copying during retrieval prevents a caller from editing the saved baseline through its result. Registering an existing name replaces that baseline; unknown names fail explicitly.
+The registry copies twice for different reasons. Copying on registration protects the baseline from later edits to the supplied template. Copying on retrieval protects it from edits to the result. Registering the same name replaces the baseline; requesting an unknown name throws.
 
-This registry trusts implementations to honor the copy contract. It is a single-threaded teaching example, not a concurrent template repository.
+The registry assumes each implementation returns an independent copy. Access is single-threaded here.
 
 ### 5. Copy and customize
 
@@ -164,7 +160,7 @@ For copying while another thread mutates the source, a thread-safe map alone is 
 
 ## Complete runnable example
 
-This listing and its download come from the same Java source verified by CI. It targets **Java 21** and is runnable as one file.
+Save this as `PrototypeDemo.java` and use Java 21 or later.
 
 <a href={path('downloads/PrototypeDemo.java')} download="PrototypeDemo.java">Download PrototypeDemo.java ↓</a>
 
@@ -209,7 +205,7 @@ Titles, tool values, and registry names must be non-null and nonblank. Footers m
 
 Java’s `Object.clone()` copies fields without recursively copying the objects those fields reference. `Cloneable` is a marker interface; it does not declare a callable `clone()` method. Using it does not automatically provide the independent nested state required here.
 
-This guide uses an explicit `copy()` contract and constructors so its ownership choices are visible. Prototype does not require `Cloneable`, `Object.clone()`, serialization, or reflection.
+The example uses a copy constructor because the field-by-field decisions are easy to inspect. The `copy()` interface supplies the polymorphism; `Cloneable` is unnecessary.
 
 If integrating with an existing clone-based API, read its documented contract carefully. A cloned container may still contain references to the original mutable elements.
 
@@ -242,7 +238,7 @@ javac --release 21 PrototypeDemo.java PrototypeChecks.java
 java PrototypeChecks
 ```
 
-Failures throw `AssertionError`; no `-ea` flag is needed. CI compiles and checks all four completed examples on JDK 21. Copy isolation is verified through domain behavior, rather than merely comparing references.
+A failed check throws `AssertionError`. The isolation checks edit both reports and inspect their output, so they catch shared nested state as well as shared outer identity.
 
 ## Tradeoffs and common mistakes
 
@@ -258,7 +254,7 @@ Do not confuse another reference with another object. Do not assume a final fiel
 
 A copy also needs its own lifecycle rules: should transient caches be cleared, audit metadata retained, or IDs regenerated? The answer depends on what “duplicate” means in the domain.
 
-## Compare related approaches
+## Related patterns
 
 | Approach | Starting point | Compared with Prototype |
 | --- | --- | --- |
@@ -272,14 +268,9 @@ Builder and Prototype can cooperate: build and validate a baseline once, then us
 
 <a href={path('patterns/builder/')}>Builder guide →</a> · <a href={path('patterns/abstract-factory/')}>Abstract Factory guide →</a> · <a href={path('patterns/factory-method/')}>Factory Method guide →</a> · <a href={path('patterns/memento/')}>Memento guide →</a>
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** create new objects from configured instances.
-- **Recognize it:** runtime templates and expensive or repetitive reconstruction.
-- **Prototype:** owns the copy policy behind a common interface.
-- **Registry:** optionally selects named baselines.
-- **Verify:** identity, initial content, and isolation of every owned mutable field.
-- **Ask first:** would an immutable value, constructor, or builder be clearer?
+Copying is convenient when the configured baseline is easier to understand than the steps that built it. Before exposing copy(), decide which state belongs to the new object. Every new mutable field should prompt a review of the copy constructor and its isolation tests.
 
 ## References
 
@@ -287,5 +278,3 @@ Builder and Prototype can cooperate: build and validate a baseline once, then us
 - [Oracle Java 21 — Object.clone](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Object.html#clone()). Field-copy behavior and the responsibility for nested mutable state.
 - [Oracle Java 21 — Cloneable](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Cloneable.html). The marker-interface contract and its limitations.
 - [Refactoring.Guru — Prototype](https://refactoring.guru/design-patterns/prototype). An illustrated secondary explanation of copying through a prototype abstraction.
-
-The report example and explanations are original teaching material. Names and roles follow the GoF catalog.

@@ -13,13 +13,13 @@ import PatternDiagram from '../../components/PatternDiagram.astro';
 import RuntimeSteps from '../../components/RuntimeSteps.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-Facade provides a convenient entry point to a subsystem. A release workflow may require validation, archiving, and notification. A ReleaseFacade exposes publish while coordinating these collaborators in one place.
+Publishing a release involves several calls: validate its content, store it, then notify interested users. If every caller repeats those steps, their order and error handling tend to drift.
 
-> Simplifying the API does not simplify away distributed failure: make partial success visible.
+`ReleaseFacade.publish()` gives callers one operation for that workflow. Validation, storage, and notification still live in separate collaborators; the facade coordinates them.
 
-## The problem before the pattern
+## Why use it
 
 If each caller repeats the same subsystem calls, order and failure behavior drift. Some callers may notify before storage succeeds. A facade makes the supported workflow explicit while leaving specialized subsystem APIs available where appropriate.
 
@@ -32,7 +32,7 @@ If each caller repeats the same subsystem calls, order and failure behavior drif
 
 ## Structure and pattern roles
 
-<PatternDiagram {...{"id": "facade-roles", "title": "Facade role relationships", "description": "ReleaseFacade: Facade; Validator: Subsystem contract; Archive: Subsystem contract; Notifier: Subsystem contract. Simplifying the API does not simplify away distributed failure: make partial success visible.", "nodes": [{"title": "ReleaseFacade", "role": "Facade", "detail": "publish(release)"}, {"title": "Validator", "role": "Subsystem contract", "detail": "validate(release)"}, {"title": "Archive", "role": "Subsystem contract", "detail": "store(release): id"}, {"title": "Notifier", "role": "Subsystem contract", "detail": "notifyRelease(id)"}], "edges": [{"to": 1, "label": "validates", "relation": "uses", "from": 0}, {"to": 2, "label": "stores", "relation": "uses", "from": 0}, {"to": 3, "label": "notifies", "relation": "uses", "from": 0}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+<PatternDiagram {...{"id": "facade-roles", "title": "Facade role relationships", "description": "ReleaseFacade is the facade. Validator is the subsystem contract. Archive is the subsystem contract. Notifier is the subsystem contract.", "nodes": [{"title": "ReleaseFacade", "role": "Facade", "detail": "publish(release)"}, {"title": "Validator", "role": "Subsystem contract", "detail": "validate(release)"}, {"title": "Archive", "role": "Subsystem contract", "detail": "store(release): id"}, {"title": "Notifier", "role": "Subsystem contract", "detail": "notifyRelease(id)"}], "edges": [{"to": 1, "label": "validates", "relation": "uses", "from": 0}, {"to": 2, "label": "stores", "relation": "uses", "from": 0}, {"to": 3, "label": "notifies", "relation": "uses", "from": 0}], "caption": "ReleaseFacade calls the three subsystem contracts in order. The subsystems remain separate responsibilities."}} />
 
 | Role | Java types | Responsibility |
 | --- | --- | --- |
@@ -43,23 +43,23 @@ If each caller repeats the same subsystem calls, order and failure behavior drif
 
 ## Java walkthrough
 
-### 1. Define the subsystem contracts
+### 1. Keep subsystem responsibilities separate
 
-Separate interfaces make side effects explicit and permit recording or failing implementations in tests.
+The validator, archive, and notifier have separate interfaces. Tests can record their calls or make one fail without changing the facade.
 
-### 2. Validate before side effects
+### 2. Validate before storing
 
-publish rejects null input and delegates validation before invoking the archive.
+`publish()` rejects a null release, then asks the validator to check it. A validation failure stops the workflow before archive or notification calls occur.
 
-### 3. Store and then notify
+### 3. Pass the stored identifier to notification
 
-A non-null archive identifier becomes the notification argument. Failures propagate; later steps do not run after a failed earlier step.
+The archive returns an identifier. The facade checks that it is non-null and gives that same identifier to the notifier.
 
-### 4. Expose a focused operation
+### 4. Give callers one operation
 
-The client receives the returned release identifier rather than coordinating three collaborators.
+The caller supplies a release and receives its identifier. If a step throws, the exception reaches the caller; successful earlier side effects remain.
 
-The key collaboration is visible here (imports and surrounding types are in the complete listing):
+For example:
 
 ```java
 String id = Objects.requireNonNull(archive.store(release));
@@ -68,11 +68,11 @@ notifier.notifyRelease(id);
 
 ## Runtime sequence
 
-<RuntimeSteps id="facade-runtime" title="One concrete execution trace" steps={[{"label": "Publish", "detail": "Client supplies a Release with tool items."}, {"label": "Validate", "detail": "Validator checks release content before storage."}, {"label": "Archive", "detail": "Archive stores it and returns R-001."}, {"label": "Notify", "detail": "Notifier receives the identifier after successful storage."}]} />
+<RuntimeSteps id="facade-runtime" title="Publishing a release" steps={[{"label": "Publish", "detail": "Client supplies a Release with tool items."}, {"label": "Validate", "detail": "Validator checks release content before storage."}, {"label": "Archive", "detail": "Archive stores it and returns R-001."}, {"label": "Notify", "detail": "Notifier receives the identifier after successful storage."}]} />
 
 ## Complete runnable example
 
-This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+Save this as `FacadeDemo.java` and use Java 21 or later.
 
 <a href={path('downloads/FacadeDemo.java')} download="FacadeDemo.java">Download FacadeDemo.java ↓</a>
 
@@ -108,7 +108,7 @@ Introduce a notification failure and decide how production should recover. An ou
 
 ## Verification
 
-FacadeChecks.java verifies: Call order and identifier propagation, validation failure before side effects, archive failure suppressing notification, and notification failure leaving the archive action completed.
+`FacadeChecks.java` covers call order and identifier propagation, validation failure before side effects, archive failure suppressing notification, and notification failure leaving the archive action completed.
 
 ```bash
 cd examples/facade
@@ -116,11 +116,11 @@ javac --release 21 FacadeDemo.java FacadeChecks.java
 java FacadeChecks
 ```
 
-Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+The checks throw `AssertionError` on failure. The console output is also checked against `expected.txt`.
 
-## Tradeoffs and implementation limits
+## Tradeoffs
 
-| Concern | Design judgment |
+| Decision | What to consider |
 | --- | --- |
 | Convenience | A focused workflow reduces caller complexity, but an all-purpose facade can become a large service. |
 | Error semantics | Document partial success and preserve meaningful failures. |
@@ -128,7 +128,7 @@ Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the d
 
 The example uses in-memory callbacks and does not send notifications. It has no transaction, rollback, persistence, retries, or distributed coordination. A notifier failure can occur after archive success; the caller receives the failure but must not assume nothing happened.
 
-## Compare related patterns
+## Related patterns
 
 | Approach | Distinction |
 | --- | --- |
@@ -137,17 +137,12 @@ The example uses in-memory callbacks and does not send notifications. It has no 
 
 <a href={path('patterns/adapter/')}> Adapter guide →</a> · <a href={path('patterns/mediator/')}> Mediator guide →</a> · <a href={path('patterns/proxy/')}> Proxy guide →</a>
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** Provide a simpler entry point to a complex subsystem.
-- **Recognize it:** If each caller repeats the same subsystem calls, order and failure behavior drift.
-- **Key collaboration:** publish rejects null input and delegates validation before invoking the archive..
-- **Ask first:** Simplifying the API does not simplify away distributed failure: make partial success visible.
+A facade helps when callers repeatedly perform the same subsystem workflow. Keep that workflow focused and be clear about partial success. If notification fails after archiving, the archive still exists; the shorter API does not make the operation transactional.
 
 ## References
 
 - [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Facade chapter.
-- [Oracle Java 21 — Objects.requireNonNull](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Objects.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Oracle Java 21 — Objects.requireNonNull](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Objects.html). Null handling at the facade boundary.
 - [Refactoring.Guru — Facade](https://refactoring.guru/design-patterns/facade). Illustrated secondary explanation and comparisons.
-
-The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

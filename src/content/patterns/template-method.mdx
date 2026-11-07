@@ -13,13 +13,13 @@ import PatternDiagram from '../../components/PatternDiagram.astro';
 import RuntimeSteps from '../../components/RuntimeSteps.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-Template Method defines the fixed outline of an algorithm in a superclass while allowing subclasses to supply selected steps. An import job normalizes values, validates each result, creates a completed immutable list, and finally calls a completion hook.
+Two import jobs may share almost their entire workflow: read the values, normalize them, validate them, and return the completed list. One keeps the supplied case; the other converts names to uppercase.
 
-> Document when each hook runs and what it may do; hooks are a contract, not a license to bypass invariants.
+Template Method keeps that sequence in a superclass. Subclasses supply the normalization step, while the shared `run()` method controls when each step happens.
 
-## The problem before the pattern
+## Why use it
 
 Two import variants may duplicate input iteration, validation, and completion handling while differing only in normalization. Copying the algorithm creates drift. Keep the order in one final method and override only the variation points.
 
@@ -32,7 +32,7 @@ Two import variants may duplicate input iteration, validation, and completion ha
 
 ## Structure and pattern roles
 
-<PatternDiagram {...{"id": "template-method-roles", "title": "Template Method role relationships", "description": "ImportJob: Abstract template; normalize / validate: Extension points; UppercaseImport: Concrete subclass; TrimImport: Concrete subclass. Document when each hook runs and what it may do; hooks are a contract, not a license to bypass invariants.", "nodes": [{"title": "ImportJob", "role": "Abstract template", "detail": "final run(raw)"}, {"title": "normalize / validate", "role": "Extension points", "detail": "required step / default step"}, {"title": "UppercaseImport", "role": "Concrete subclass", "detail": "normalize: strip + uppercase"}, {"title": "TrimImport", "role": "Concrete subclass", "detail": "normalize: strip"}], "edges": [{"to": 1, "label": "calls steps", "relation": "uses", "from": 0}, {"to": 0, "label": "extends", "relation": "extends", "from": 2}, {"to": 0, "label": "extends", "relation": "extends", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+<PatternDiagram {...{"id": "template-method-roles", "title": "Template Method role relationships", "description": "ImportJob is the abstract template. normalize / validate is the extension points. UppercaseImport is the concrete subclass. TrimImport is the concrete subclass.", "nodes": [{"title": "ImportJob", "role": "Abstract template", "detail": "final run(raw)"}, {"title": "normalize / validate", "role": "Extension points", "detail": "required step / default step"}, {"title": "UppercaseImport", "role": "Concrete subclass", "detail": "normalize: strip + uppercase"}, {"title": "TrimImport", "role": "Concrete subclass", "detail": "normalize: strip"}], "edges": [{"to": 1, "label": "calls steps", "relation": "uses", "from": 0}, {"to": 0, "label": "extends", "relation": "extends", "from": 2}, {"to": 0, "label": "extends", "relation": "extends", "from": 3}], "caption": "ImportJob owns the sequence; its subclasses implement the normalization step."}} />
 
 | Role | Java types | Responsibility |
 | --- | --- | --- |
@@ -44,23 +44,23 @@ Two import variants may duplicate input iteration, validation, and completion ha
 
 ## Java walkthrough
 
-### 1. Fix the algorithm order
+### 1. Keep the sequence in one method
 
-run snapshots raw input, normalizes each value, validates it, then makes an immutable result.
+`run()` copies the input, normalizes and validates each value, and produces an immutable result. It is final so subclasses cannot reorder those steps.
 
-### 2. Require the variable step
+### 2. Require the normalization step
 
-normalize is abstract. The subclasses choose uppercase-and-trim or trim-only behavior.
+`normalize()` is abstract. One subclass trims input; the other trims and converts it to uppercase using `Locale.ROOT`.
 
-### 3. Offer narrow hooks
+### 3. Provide defaults for the other hooks
 
-validate has a useful default. afterImport defaults to no action and runs only after successful normalization and validation of every item.
+`validate()` rejects blank values. `afterImport()` does nothing unless overridden, and runs only after every item has passed validation.
 
-### 4. Keep callers on the template
+### 4. Call the template from the client
 
-Clients invoke run. Marking it final prevents subclasses from accidentally reordering the workflow.
+The client invokes `run()` on either subclass. Both follow the same workflow, even though the resulting names differ.
 
-The key collaboration is visible here (imports and surrounding types are in the complete listing):
+For example:
 
 ```java
 String normalized = java.util.Objects.requireNonNull(normalize(value));
@@ -69,11 +69,11 @@ validate(normalized); result.add(normalized);
 
 ## Runtime sequence
 
-<RuntimeSteps id="template-method-runtime" title="One concrete execution trace" steps={[{"label": "Start template", "detail": "run copies the raw values."}, {"label": "Normalize and validate", "detail": "Subclass behavior processes each value in encounter order."}, {"label": "Finalize result", "detail": "All validated values become an immutable list."}, {"label": "Complete hook", "detail": "afterImport runs once, then run returns the result."}]} />
+<RuntimeSteps id="template-method-runtime" title="Running the import template" steps={[{"label": "Start template", "detail": "run copies the raw values."}, {"label": "Normalize and validate", "detail": "Subclass behavior processes each value in encounter order."}, {"label": "Finalize result", "detail": "All validated values become an immutable list."}, {"label": "Complete hook", "detail": "afterImport runs once, then run returns the result."}]} />
 
 ## Complete runnable example
 
-This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+Save this as `TemplateMethodDemo.java` and use Java 21 or later.
 
 <a href={path('downloads/TemplateMethodDemo.java')} download="TemplateMethodDemo.java">Download TemplateMethodDemo.java ↓</a>
 
@@ -108,7 +108,7 @@ Add a subclass that rejects duplicate normalized names. Decide whether duplicate
 
 ## Verification
 
-TemplateMethodChecks.java verifies: Both normalizations, empty input, fixed operation order, result immutability, null input entries, and omission of the completion hook after validation failure.
+`TemplateMethodChecks.java` covers both normalizations, empty input, fixed operation order, result immutability, null input entries, and omission of the completion hook after validation failure.
 
 ```bash
 cd examples/template-method
@@ -116,11 +116,11 @@ javac --release 21 TemplateMethodDemo.java TemplateMethodChecks.java
 java TemplateMethodChecks
 ```
 
-Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+The checks throw `AssertionError` on failure. The console output is also checked against `expected.txt`.
 
-## Tradeoffs and implementation limits
+## Tradeoffs
 
-| Concern | Design judgment |
+| Decision | What to consider |
 | --- | --- |
 | Reuse | Shared order stays consistent while subclasses implement limited variation. |
 | Inheritance | Subclass behavior couples to the superclass algorithm and hook contract. |
@@ -128,7 +128,7 @@ Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the d
 
 No files are imported; values are supplied in memory. The template validates all items before its completion hook, but subclass operations may still have side effects. The abstraction does not offer rollback if normalization or afterImport performs external work and fails.
 
-## Compare related patterns
+## Related patterns
 
 | Approach | Distinction |
 | --- | --- |
@@ -137,17 +137,12 @@ No files are imported; values are supplied in memory. The template validates all
 
 <a href={path('patterns/strategy/')}> Strategy guide →</a> · <a href={path('patterns/factory-method/')}> Factory Method guide →</a> · <a href={path('patterns/builder/')}> Builder guide →</a>
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** Define an algorithm’s structure while letting subclasses vary selected steps.
-- **Recognize it:** Two import variants may duplicate input iteration, validation, and completion handling while differing only in normalization.
-- **Key collaboration:** normalize is abstract.
-- **Ask first:** Document when each hook runs and what it may do; hooks are a contract, not a license to bypass invariants.
+Use this when the sequence is stable and subclasses should vary only a few steps. Keep the hooks narrow and document their timing. If many steps need independent replacement, composition with strategies usually gives more room to change.
 
 ## References
 
 - [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Template Method chapter.
-- [Oracle Java 21 — List.copyOf](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/List.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Oracle Java 21 — List.copyOf](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/List.html). Input and result snapshots in the import workflow.
 - [Refactoring.Guru — Template Method](https://refactoring.guru/design-patterns/template-method). Illustrated secondary explanation and comparisons.
-
-The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

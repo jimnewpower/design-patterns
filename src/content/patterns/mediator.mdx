@@ -13,13 +13,13 @@ import PatternDiagram from '../../components/PatternDiagram.astro';
 import RuntimeSteps from '../../components/RuntimeSteps.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-Mediator coordinates interactions between peer objects so they do not need direct references to each other. A format selector reports a selection change; a mediator chooses and updates the corresponding preview. The selector does not know the preview implementation.
+Selecting HTML in an export dialog should update the preview. The selector could call the preview directly, but that approach gets messy once several controls affect one another.
 
-> Move coordination rather than all business logic into the mediator, and keep its collaboration scope explicit.
+A mediator owns those interaction rules. The selector reports what changed; the mediator finds the corresponding preview and updates it. Each control keeps its own state without carrying references to every peer.
 
-## The problem before the pattern
+## Why use it
 
 If each widget directly updates several other widgets, interactions spread across the UI and become difficult to change. Routing those interactions through a mediator gives coordination rules one visible home.
 
@@ -32,7 +32,7 @@ If each widget directly updates several other widgets, interactions spread acros
 
 ## Structure and pattern roles
 
-<PatternDiagram {...{"id": "mediator-roles", "title": "Mediator role relationships", "description": "Mediator: Mediator interface; FormatSelector: Colleague; ExportMediator: Concrete mediator; Preview: Colleague. Move coordination rather than all business logic into the mediator, and keep its collaboration scope explicit.", "nodes": [{"title": "Mediator", "role": "Mediator interface", "detail": "formatChanged(sender, format)"}, {"title": "FormatSelector", "role": "Colleague", "detail": "select(format)"}, {"title": "ExportMediator", "role": "Concrete mediator", "detail": "selector-to-preview connections"}, {"title": "Preview", "role": "Colleague", "detail": "show(value)"}], "edges": [{"to": 0, "label": "notifies", "relation": "uses", "from": 1}, {"to": 0, "label": "implements", "relation": "implements", "from": 2}, {"to": 3, "label": "coordinates", "relation": "uses", "from": 2}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+<PatternDiagram {...{"id": "mediator-roles", "title": "Mediator role relationships", "description": "Mediator is the mediator interface. FormatSelector is the colleague. ExportMediator is the concrete mediator. Preview is the colleague.", "nodes": [{"title": "Mediator", "role": "Mediator interface", "detail": "formatChanged(sender, format)"}, {"title": "FormatSelector", "role": "Colleague", "detail": "select(format)"}, {"title": "ExportMediator", "role": "Concrete mediator", "detail": "selector-to-preview connections"}, {"title": "Preview", "role": "Colleague", "detail": "show(value)"}], "edges": [{"to": 0, "label": "notifies", "relation": "uses", "from": 1}, {"to": 0, "label": "implements", "relation": "implements", "from": 2}, {"to": 3, "label": "coordinates", "relation": "uses", "from": 2}], "caption": "FormatSelector reports changes through Mediator. ExportMediator chooses which Preview to update."}} />
 
 | Role | Java types | Responsibility |
 | --- | --- | --- |
@@ -43,23 +43,23 @@ If each widget directly updates several other widgets, interactions spread acros
 
 ## Java walkthrough
 
-### 1. Report a semantic event
+### 1. Have the selector report a change
 
-FormatSelector calls the mediator when a format is selected instead of updating a Preview directly.
+`FormatSelector` calls the mediator from `select()`. It has no reference to a preview.
 
-### 2. Register connections
+### 2. Connect the controls
 
-ExportMediator knows which preview belongs to each selector. Unknown senders fail explicitly.
+`ExportMediator` stores a selector-to-preview mapping. A selector must be registered before it can send a change.
 
-### 3. Validate coordination rules
+### 3. Resolve the preview content
 
-The mediator accepts text or HTML and computes preview text before mutating the preview.
+The mediator accepts text or HTML and computes the display value before calling `Preview.show()`. An unsupported format fails without changing the preview.
 
-### 4. Commit local selection
+### 4. Commit the selection after success
 
-After successful coordination, the selector records the new format. Unsupported choices leave both states unchanged in this example.
+The selector updates its own format only after the mediator returns. In this example, a rejected choice leaves both controls on their previous values.
 
-The key collaboration is visible here (imports and surrounding types are in the complete listing):
+For example:
 
 ```java
 mediator.formatChanged(this, Objects.requireNonNull(format));
@@ -68,11 +68,11 @@ this.format = format;
 
 ## Runtime sequence
 
-<RuntimeSteps id="mediator-runtime" title="One concrete execution trace" steps={[{"label": "Select HTML", "detail": "User-facing selector reports a format change."}, {"label": "Resolve colleague", "detail": "Mediator looks up that selector’s preview."}, {"label": "Coordinate", "detail": "Mediator renders the corresponding preview string."}, {"label": "Store selection", "detail": "Selector commits html after the callback succeeds."}]} />
+<RuntimeSteps id="mediator-runtime" title="Selecting HTML in the export dialog" steps={[{"label": "Select HTML", "detail": "User-facing selector reports a format change."}, {"label": "Resolve colleague", "detail": "Mediator looks up that selector’s preview."}, {"label": "Coordinate", "detail": "Mediator renders the corresponding preview string."}, {"label": "Store selection", "detail": "Selector commits html after the callback succeeds."}]} />
 
 ## Complete runnable example
 
-This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+Save this as `MediatorDemo.java` and use Java 21 or later.
 
 <a href={path('downloads/MediatorDemo.java')} download="MediatorDemo.java">Download MediatorDemo.java ↓</a>
 
@@ -106,7 +106,7 @@ Add an ExportButton whose enabled state depends on valid selection. Keep that co
 
 ## Verification
 
-MediatorChecks.java verifies: Text/HTML coordination, unsupported choices preserving state, registration requirements, isolation between multiple selector/preview pairs, and null choices.
+`MediatorChecks.java` covers text/HTML coordination, unsupported choices preserving state, registration requirements, isolation between multiple selector/preview pairs, and null choices.
 
 ```bash
 cd examples/mediator
@@ -114,11 +114,11 @@ javac --release 21 MediatorDemo.java MediatorChecks.java
 java MediatorChecks
 ```
 
-Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+The checks throw `AssertionError` on failure. The console output is also checked against `expected.txt`.
 
-## Tradeoffs and implementation limits
+## Tradeoffs
 
-| Concern | Design judgment |
+| Decision | What to consider |
 | --- | --- |
 | Reduced peer coupling | Colleagues simplify, but the mediator can accumulate too much knowledge. |
 | Lifecycle | Registration and deregistration must match component lifetime. |
@@ -126,7 +126,7 @@ Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the d
 
 This is a synchronous in-memory dialog model, not a UI framework or a message broker. Registration has no disconnect operation and the mediator retains colleagues. It is single-threaded, and callback reentrancy or multi-step peer failure needs deliberate policy in a larger implementation.
 
-## Compare related patterns
+## Related patterns
 
 | Approach | Distinction |
 | --- | --- |
@@ -135,17 +135,12 @@ This is a synchronous in-memory dialog model, not a UI framework or a message br
 
 <a href={path('patterns/observer/')}> Observer guide →</a> · <a href={path('patterns/facade/')}> Facade guide →</a> · <a href={path('patterns/command/')}> Command guide →</a>
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** Coordinate interactions between objects through a central collaborator.
-- **Recognize it:** If each widget directly updates several other widgets, interactions spread across the UI and become difficult to change.
-- **Key collaboration:** ExportMediator knows which preview belongs to each selector.
-- **Ask first:** Move coordination rather than all business logic into the mediator, and keep its collaboration scope explicit.
+Give a mediator one collaboration to manage, such as an export dialog. It should know how its controls interact, not become the place every component sends every event. Split it when unrelated workflows start sharing the same coordinator.
 
 ## References
 
 - [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Mediator chapter.
-- [Oracle Java 21 — Map](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Map.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Oracle Java 21 — Map](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Map.html). The selector-to-preview mapping used by the mediator.
 - [Refactoring.Guru — Mediator](https://refactoring.guru/design-patterns/mediator). Illustrated secondary explanation and comparisons.
-
-The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

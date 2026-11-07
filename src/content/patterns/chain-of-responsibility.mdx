@@ -13,13 +13,13 @@ import PatternDiagram from '../../components/PatternDiagram.astro';
 import RuntimeSteps from '../../components/RuntimeSteps.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-Chain of Responsibility passes a request along potential handlers until one handles it or a terminal policy applies. A tool purchase may be approved by a team lead, escalated to a manager, or rejected when no limit covers the cost.
+A team lead can approve a small purchase. A larger one goes to a manager. If neither has enough authority, the request is rejected.
 
-> Specify whether your chain is first-match, all-stages, or explicit continuation; these are different contracts.
+Chain of Responsibility represents that escalation as linked handlers. A handler either answers the request or passes it on. The caller submits to the first handler and does not need to choose the eventual approver.
 
-## The problem before the pattern
+## Why use it
 
 A central approval function can accumulate role-specific conditionals and escalation rules. Callers should submit a request without knowing which approver will accept it. Linked handlers keep each decision local and make ordering explicit at construction.
 
@@ -32,7 +32,7 @@ A central approval function can accumulate role-specific conditionals and escala
 
 ## Structure and pattern roles
 
-<PatternDiagram {...{"id": "chain-of-responsibility-roles", "title": "Chain of Responsibility role relationships", "description": "Handler: Handler interface; LimitApprover: Concrete handler; Reject: Terminal handler; Request: Input. Specify whether your chain is first-match, all-stages, or explicit continuation; these are different contracts.", "nodes": [{"title": "Handler", "role": "Handler interface", "detail": "handle(request)"}, {"title": "LimitApprover", "role": "Concrete handler", "detail": "name, limit, next"}, {"title": "Reject", "role": "Terminal handler", "detail": "explicit unhandled outcome"}, {"title": "Request", "role": "Input", "detail": "purpose, cost"}], "edges": [{"to": 0, "label": "implements", "relation": "implements", "from": 1}, {"to": 0, "label": "implements", "relation": "implements", "from": 2}, {"to": 1, "label": "evaluated by", "relation": "uses", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+<PatternDiagram {...{"id": "chain-of-responsibility-roles", "title": "Chain of Responsibility role relationships", "description": "Handler is the handler interface. LimitApprover is the concrete handler. Reject is the terminal handler. Request is the input.", "nodes": [{"title": "Handler", "role": "Handler interface", "detail": "handle(request)"}, {"title": "LimitApprover", "role": "Concrete handler", "detail": "name, limit, next"}, {"title": "Reject", "role": "Terminal handler", "detail": "explicit unhandled outcome"}, {"title": "Request", "role": "Input", "detail": "purpose, cost"}], "edges": [{"to": 0, "label": "implements", "relation": "implements", "from": 1}, {"to": 0, "label": "implements", "relation": "implements", "from": 2}, {"to": 1, "label": "evaluated by", "relation": "uses", "from": 3}], "caption": "Each approver holds a successor. Reject ends the chain when no approval limit covers the request."}} />
 
 | Role | Java types | Responsibility |
 | --- | --- | --- |
@@ -43,23 +43,23 @@ A central approval function can accumulate role-specific conditionals and escala
 
 ## Java walkthrough
 
-### 1. Define a request
+### 1. Represent the request
 
-Request rejects negative costs. Values are abstract cost units, not a currency model.
+`Request` holds a purpose and a nonnegative cost. These are abstract cost units; the example does not attempt currency conversion or authorization.
 
-### 2. Define the handler contract
+### 2. Decide whether to handle or pass on
 
-Each handler returns one decision string. This chain short-circuits on the first approval.
+A `LimitApprover` compares the cost with its limit. It approves requests at or below the limit and passes larger ones to its successor.
 
-### 3. Link potential approvers
+### 3. Assemble the escalation order
 
-A LimitApprover stores its successor. It approves within its limit and delegates all larger requests.
+The client links a team lead to a manager. Each handler knows only its own decision and the next handler, not the entire approval policy.
 
-### 4. Terminate explicitly
+### 4. Finish with a rejection handler
 
-Reject supplies a final outcome, so callers do not receive null when no approver accepts.
+`Reject` gives uncovered requests an explicit outcome. The caller receives a decision string even when nobody can approve.
 
-The key collaboration is visible here (imports and surrounding types are in the complete listing):
+For example:
 
 ```java
 return request.cost() <= limit ? "Approved by " + name : next.handle(request);
@@ -67,11 +67,11 @@ return request.cost() <= limit ? "Approved by " + name : next.handle(request);
 
 ## Runtime sequence
 
-<RuntimeSteps id="chain-of-responsibility-runtime" title="One concrete execution trace" steps={[{"label": "Submit 500 units", "detail": "Client sends the request to the team lead."}, {"label": "Escalate", "detail": "Lead limit 100 is insufficient; delegate to manager."}, {"label": "Handle", "detail": "Manager limit 1000 covers the request."}, {"label": "Return decision", "detail": "The first approval returns without visiting Reject."}]} />
+<RuntimeSteps id="chain-of-responsibility-runtime" title="Escalating a 500-unit request" steps={[{"label": "Submit 500 units", "detail": "Client sends the request to the team lead."}, {"label": "Escalate", "detail": "Lead limit 100 is insufficient; delegate to manager."}, {"label": "Handle", "detail": "Manager limit 1000 covers the request."}, {"label": "Return decision", "detail": "The first approval returns without visiting Reject."}]} />
 
 ## Complete runnable example
 
-This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+Save this as `ChainOfResponsibilityDemo.java` and use Java 21 or later.
 
 <a href={path('downloads/ChainOfResponsibilityDemo.java')} download="ChainOfResponsibilityDemo.java">Download ChainOfResponsibilityDemo.java ↓</a>
 
@@ -107,7 +107,7 @@ Add an AuditHandler that records decisions. Decide whether it wraps the whole ch
 
 ## Verification
 
-ChainOfResponsibilityChecks.java verifies: Inclusive threshold, zero cost, first-handler short-circuiting, successor invocation, terminal rejection, and invalid request/limit handling.
+`ChainOfResponsibilityChecks.java` covers inclusive threshold, zero cost, first-handler short-circuiting, successor invocation, terminal rejection, and invalid request/limit handling.
 
 ```bash
 cd examples/chain-of-responsibility
@@ -115,11 +115,11 @@ javac --release 21 ChainOfResponsibilityDemo.java ChainOfResponsibilityChecks.ja
 java ChainOfResponsibilityChecks
 ```
 
-Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+The checks throw `AssertionError` on failure. The console output is also checked against `expected.txt`.
 
-## Tradeoffs and implementation limits
+## Tradeoffs
 
-| Concern | Design judgment |
+| Decision | What to consider |
 | --- | --- |
 | Ordering | The first capable handler wins; changing order changes behavior. |
 | Unhandled requests | Define an explicit rejection or fallback rather than dropping requests. |
@@ -127,7 +127,7 @@ Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the d
 
 The chain is assembled as immutable forward references and has no remote calls or identity-based authorization. Name and limit are teaching configuration, not proof of authority. This first-match example is different from a pipeline where every stage must process the request.
 
-## Compare related patterns
+## Related patterns
 
 | Approach | Distinction |
 | --- | --- |
@@ -136,17 +136,12 @@ The chain is assembled as immutable forward references and has no remote calls o
 
 <a href={path('patterns/command/')}> Command guide →</a> · <a href={path('patterns/decorator/')}> Decorator guide →</a> · <a href={path('patterns/mediator/')}> Mediator guide →</a>
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** Pass a request through potential handlers.
-- **Recognize it:** A central approval function can accumulate role-specific conditionals and escalation rules.
-- **Key collaboration:** Each handler returns one decision string.
-- **Ask first:** Specify whether your chain is first-match, all-stages, or explicit continuation; these are different contracts.
+Use a chain when the handler is determined as the request moves through it. Make ordering and termination obvious. A first-match approval chain and a pipeline that runs every stage may look similar in code, but callers need very different guarantees.
 
 ## References
 
 - [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Chain of Responsibility chapter.
-- [Oracle Java 21 — Objects.requireNonNull](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Objects.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Oracle Java 21 — Objects.requireNonNull](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Objects.html). Request and successor validation in the example.
 - [Refactoring.Guru — Chain of Responsibility](https://refactoring.guru/design-patterns/chain-of-responsibility). Illustrated secondary explanation and comparisons.
-
-The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

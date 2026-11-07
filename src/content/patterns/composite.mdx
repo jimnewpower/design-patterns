@@ -13,13 +13,13 @@ import PatternDiagram from '../../components/PatternDiagram.astro';
 import RuntimeSteps from '../../components/RuntimeSteps.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-Composite lets clients treat a single object and a group of objects through the same interface. A part has a mass; an assembly also has a mass, computed from its children. The client asks grams() without deciding whether it received a leaf or a group.
+A housing has a mass. So does an assembly containing that housing, a board, and a cable. A caller should be able to ask either object for its mass without writing a different traversal for each nesting level.
 
-> Define whether your model is a tree, a graph, or placements in a graph before choosing traversal and aggregation rules.
+Composite gives parts and assemblies the same interface. A part returns its stored mass; an assembly asks its children and adds their results.
 
-## The problem before the pattern
+## Why use it
 
 A client that checks each object type and manually drills into nested lists duplicates traversal logic. Every new nesting level or leaf type can require another special case. Put the common operation on Component and let a group delegate recursively.
 
@@ -32,7 +32,7 @@ A client that checks each object type and manually drills into nested lists dupl
 
 ## Structure and pattern roles
 
-<PatternDiagram {...{"id": "composite-roles", "title": "Composite role relationships", "description": "Component: Component interface; Part: Leaf; Assembly: Composite; Client: Consumer role. Define whether your model is a tree, a graph, or placements in a graph before choosing traversal and aggregation rules.", "nodes": [{"title": "Component", "role": "Component interface", "detail": "name(), grams()"}, {"title": "Part", "role": "Leaf", "detail": "stored nonnegative grams"}, {"title": "Assembly", "role": "Composite", "detail": "children: List<Component>"}, {"title": "Client", "role": "Consumer role", "detail": "calls Component.grams()"}], "edges": [{"to": 0, "label": "implements", "relation": "implements", "from": 1}, {"to": 0, "label": "implements", "relation": "implements", "from": 2}, {"to": 1, "label": "may receive leaf", "relation": "uses", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+<PatternDiagram {...{"id": "composite-roles", "title": "Composite role relationships", "description": "Component is the component interface. Part is the leaf. Assembly is the composite. Client is the consumer role.", "nodes": [{"title": "Component", "role": "Component interface", "detail": "name(), grams()"}, {"title": "Part", "role": "Leaf", "detail": "stored nonnegative grams"}, {"title": "Assembly", "role": "Composite", "detail": "children: List<Component>"}, {"title": "Client", "role": "Consumer role", "detail": "calls Component.grams()"}], "edges": [{"to": 0, "label": "implements", "relation": "implements", "from": 1}, {"to": 0, "label": "implements", "relation": "implements", "from": 2}, {"to": 1, "label": "may receive leaf", "relation": "uses", "from": 3}], "caption": "Part and Assembly share the mass operation. An assembly obtains its total by calling that operation on its children."}} />
 
 | Role | Java types | Responsibility |
 | --- | --- | --- |
@@ -43,23 +43,23 @@ A client that checks each object type and manually drills into nested lists dupl
 
 ## Java walkthrough
 
-### 1. Define the common operation
+### 1. Put mass on the common interface
 
-The sealed Component interface lists the permitted immutable implementations. All masses are integral grams represented as long.
+Both `Part` and `Assembly` implement `Component.grams()`. Mass is a nonnegative `long` measured in integral grams throughout this example.
 
-### 2. Validate a leaf
+### 2. Keep the leaf simple
 
-Part rejects negative masses and null names. Its record accessor directly implements grams().
+A `Part` stores its mass. The record constructor rejects negative values and null names; its generated accessor supplies the common operation.
 
-### 3. Aggregate children
+### 3. Let the group ask its children
 
-Assembly snapshots its child list and recursively adds each child mass. Math.addExact rejects overflow instead of silently wrapping.
+`Assembly` copies the child list. Its `grams()` method calls the same operation on each child and sums the results with `Math.addExact`, which throws on overflow.
 
-### 4. Build the tree
+### 4. Use the root like any other component
 
-main nests an Electronics assembly inside a Sensor. The same grams() call works for either node.
+The Sensor contains a Housing and an Electronics assembly. The client asks the Sensor for its mass without knowing how many levels it contains.
 
-The key collaboration is visible here (imports and surrounding types are in the complete listing):
+For example:
 
 ```java
 for (Component child : children) total = Math.addExact(total, child.grams());
@@ -67,11 +67,11 @@ for (Component child : children) total = Math.addExact(total, child.grams());
 
 ## Runtime sequence
 
-<RuntimeSteps id="composite-runtime" title="One concrete execution trace" steps={[{"label": "Request aggregate", "detail": "Client calls grams() on the Sensor assembly."}, {"label": "Visit nested group", "detail": "Sensor requests mass from Housing and Electronics."}, {"label": "Resolve leaves", "detail": "Electronics sums Board and Cable through Component."}, {"label": "Return total", "detail": "Each assembly returns its subtotal; Sensor returns 140 g."}]} />
+<RuntimeSteps id="composite-runtime" title="Calculating the Sensor assembly mass" steps={[{"label": "Request aggregate", "detail": "Client calls grams() on the Sensor assembly."}, {"label": "Visit nested group", "detail": "Sensor requests mass from Housing and Electronics."}, {"label": "Resolve leaves", "detail": "Electronics sums Board and Cable through Component."}, {"label": "Return total", "detail": "Each assembly returns its subtotal; Sensor returns 140 g."}]} />
 
 ## Complete runnable example
 
-This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+Save this as `CompositeDemo.java` and use Java 21 or later.
 
 <a href={path('downloads/CompositeDemo.java')} download="CompositeDemo.java">Download CompositeDemo.java ↓</a>
 
@@ -105,7 +105,7 @@ Add a recursive leaf-count operation. Decide whether it belongs on Component or 
 
 ## Verification
 
-CompositeChecks.java verifies: Nested totals, empty assemblies, defensive copying, unmodifiable children, rejection of invalid leaves and null children, and explicit arithmetic overflow.
+`CompositeChecks.java` covers nested totals, empty assemblies, defensive copying, unmodifiable children, rejection of invalid leaves and null children, and explicit arithmetic overflow.
 
 ```bash
 cd examples/composite
@@ -113,11 +113,11 @@ javac --release 21 CompositeDemo.java CompositeChecks.java
 java CompositeChecks
 ```
 
-Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+The checks throw `AssertionError` on failure. The console output is also checked against `expected.txt`.
 
-## Tradeoffs and implementation limits
+## Tradeoffs
 
-| Concern | Design judgment |
+| Decision | What to consider |
 | --- | --- |
 | Uniform operation | Clients stay simple, but leaf and group semantics must be coherent. |
 | Tree invariants | Immutability makes normal cyclic construction unavailable; mutable graphs need cycle policy. |
@@ -125,7 +125,7 @@ Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the d
 
 This is an immutable tree. It does not model physical tolerances, units conversion, cyclic product graphs, or concurrent editing. A reusable object can occur in multiple child positions and its mass counts once per placement. Very deep recursion can exhaust the call stack.
 
-## Compare related patterns
+## Related patterns
 
 | Approach | Distinction |
 | --- | --- |
@@ -134,17 +134,12 @@ This is an immutable tree. It does not model physical tolerances, units conversi
 
 <a href={path('patterns/visitor/')}> Visitor guide →</a> · <a href={path('patterns/decorator/')}> Decorator guide →</a> · <a href={path('patterns/iterator/')}> Iterator guide →</a>
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** Treat individual objects and groups through the same interface.
-- **Recognize it:** A client that checks each object type and manually drills into nested lists duplicates traversal logic.
-- **Key collaboration:** Part rejects negative masses and null names.
-- **Ask first:** Define whether your model is a tree, a graph, or placements in a graph before choosing traversal and aggregation rules.
+Use a common interface when an operation makes sense for both a leaf and a group. Then settle the structure rules: are children owned, can a subassembly appear twice, and is the model a tree or a graph? Those answers determine how totals and traversal should behave.
 
 ## References
 
 - [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Composite chapter.
-- [Oracle Java 21 — List.copyOf](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/List.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Oracle Java 21 — List.copyOf](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/List.html). The immutable child-list snapshot used by Assembly.
 - [Refactoring.Guru — Composite](https://refactoring.guru/design-patterns/composite). Illustrated secondary explanation and comparisons.
-
-The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

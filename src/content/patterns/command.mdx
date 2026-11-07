@@ -13,13 +13,13 @@ import PatternDiagram from '../../components/PatternDiagram.astro';
 import RuntimeSteps from '../../components/RuntimeSteps.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-Command turns an operation into an object containing the information needed to execute it. An append command knows its document and text. A history invokes commands and can ask the latest one to undo itself without knowing the document-edit details.
+A menu action, a keyboard shortcut, and an undo history may all need to invoke the same edit. None of them should contain the code that changes the document.
 
-> Command does not require undo. If undo is offered, define receiver ownership, failure behavior, and reversibility explicitly.
+Command packages the edit with its receiver and arguments. `AppendText` knows which document to change and what to append. `History` knows how to execute commands and undo the most recent one, without knowing how an append works.
 
-## The problem before the pattern
+## Why use it
 
 Buttons, queues, and undo histories should not each implement document editing. Storing only callbacks may also omit the state needed to reverse an operation. A command separates who requests an action from the receiver that performs it.
 
@@ -32,7 +32,7 @@ Buttons, queues, and undo histories should not each implement document editing. 
 
 ## Structure and pattern roles
 
-<PatternDiagram {...{"id": "command-roles", "title": "Command role relationships", "description": "Command: Command interface; AppendText: Concrete command; History: Invoker; Document: Receiver. Command does not require undo. If undo is offered, define receiver ownership, failure behavior, and reversibility explicitly.", "nodes": [{"title": "Command", "role": "Command interface", "detail": "execute(), undo()"}, {"title": "AppendText", "role": "Concrete command", "detail": "receiver, addition, prior state"}, {"title": "History", "role": "Invoker", "detail": "execute(command), undo()"}, {"title": "Document", "role": "Receiver", "detail": "text(), replace(value)"}], "edges": [{"to": 0, "label": "implements", "relation": "implements", "from": 1}, {"to": 0, "label": "invokes", "relation": "uses", "from": 2}, {"to": 3, "label": "edits receiver", "relation": "uses", "from": 1}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+<PatternDiagram {...{"id": "command-roles", "title": "Command role relationships", "description": "Command is the command interface. AppendText is the concrete command. History is the invoker. Document is the receiver.", "nodes": [{"title": "Command", "role": "Command interface", "detail": "execute(), undo()"}, {"title": "AppendText", "role": "Concrete command", "detail": "receiver, addition, prior state"}, {"title": "History", "role": "Invoker", "detail": "execute(command), undo()"}, {"title": "Document", "role": "Receiver", "detail": "text(), replace(value)"}], "edges": [{"to": 0, "label": "implements", "relation": "implements", "from": 1}, {"to": 0, "label": "invokes", "relation": "uses", "from": 2}, {"to": 3, "label": "edits receiver", "relation": "uses", "from": 1}], "caption": "History invokes Command objects. AppendText holds the document and the state needed to reverse its edit."}} />
 
 | Role | Java types | Responsibility |
 | --- | --- | --- |
@@ -43,23 +43,23 @@ Buttons, queues, and undo histories should not each implement document editing. 
 
 ## Java walkthrough
 
-### 1. Separate receiver and operation
+### 1. Separate the edit from the document
 
-Document owns text. AppendText owns the request and snapshots around that request.
+`Document` owns the text. `AppendText` owns an addition and the information needed to reverse its application.
 
-### 2. Execute with lifecycle checks
+### 2. Track whether the command is applied
 
-The command rejects applying itself twice without undo. It saves prior text and records its expected post-edit text.
+On execution, the command saves the previous text and computes the expected result. Applying the same command again before undo is an error.
 
-### 3. Record only successful execution
+### 3. Record successful commands
 
-History pushes after execute returns. A failing command is not added to the undo stack.
+`History.execute()` pushes the command after execution returns. If execution throws, the history does not claim the command succeeded.
 
-### 4. Undo conservatively
+### 4. Undo the most recent edit
 
-History peeks first and removes only after a successful undo. AppendText rejects undo if the receiver text differs from the expected result.
+History peeks before undoing and pops only after success. The append checks the current text against its expected result so it does not overwrite an obvious external edit.
 
-The key collaboration is visible here (imports and surrounding types are in the complete listing):
+For example:
 
 ```java
 Objects.requireNonNull(command).execute(); commands.push(command);
@@ -67,11 +67,11 @@ Objects.requireNonNull(command).execute(); commands.push(command);
 
 ## Runtime sequence
 
-<RuntimeSteps id="command-runtime" title="One concrete execution trace" steps={[{"label": "Execute first command", "detail": "Append Engineering and push the command."}, {"label": "Execute second command", "detail": "Append report and push the command."}, {"label": "Request undo", "detail": "History invokes the most recent command."}, {"label": "Restore prior content", "detail": "Second command restores Engineering and leaves the first in history."}]} />
+<RuntimeSteps id="command-runtime" title="Appending text and undoing the last edit" steps={[{"label": "Execute first command", "detail": "Append Engineering and push the command."}, {"label": "Execute second command", "detail": "Append report and push the command."}, {"label": "Request undo", "detail": "History invokes the most recent command."}, {"label": "Restore prior content", "detail": "Second command restores Engineering and leaves the first in history."}]} />
 
 ## Complete runnable example
 
-This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+Save this as `CommandDemo.java` and use Java 21 or later.
 
 <a href={path('downloads/CommandDemo.java')} download="CommandDemo.java">Download CommandDemo.java ↓</a>
 
@@ -106,7 +106,7 @@ Add redo with a second stack. Clear redo when a new successful edit branches his
 
 ## Verification
 
-CommandChecks.java verifies: LIFO reversal, empty undo, re-execution after undo, duplicate application rejection, external-edit detection, and retaining valid history when execution or undo fails.
+`CommandChecks.java` covers lIFO reversal, empty undo, re-execution after undo, duplicate application rejection, external-edit detection, and retaining valid history when execution or undo fails.
 
 ```bash
 cd examples/command
@@ -114,11 +114,11 @@ javac --release 21 CommandDemo.java CommandChecks.java
 java CommandChecks
 ```
 
-Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+The checks throw `AssertionError` on failure. The console output is also checked against `expected.txt`.
 
-## Tradeoffs and implementation limits
+## Tradeoffs
 
-| Concern | Design judgment |
+| Decision | What to consider |
 | --- | --- |
 | Decoupling | Invokers become generic while command types and lifecycle rules grow. |
 | Undo | Not every action is reversible; compensating a remote action is a separate domain operation. |
@@ -126,7 +126,7 @@ Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the d
 
 This is a single-threaded in-memory editor with no persistence. Undo stores whole text, so large documents cost memory. It expects edits to go through the history; it does not implement distributed undo, transactions, or guaranteed reversal of arbitrary external side effects.
 
-## Compare related patterns
+## Related patterns
 
 | Approach | Distinction |
 | --- | --- |
@@ -135,17 +135,12 @@ This is a single-threaded in-memory editor with no persistence. Undo stores whol
 
 <a href={path('patterns/memento/')}> Memento guide →</a> · <a href={path('patterns/strategy/')}> Strategy guide →</a> · <a href={path('patterns/chain-of-responsibility/')}> Chain Of Responsibility guide →</a>
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** Represent a request as an object.
-- **Recognize it:** Buttons, queues, and undo histories should not each implement document editing.
-- **Key collaboration:** The command rejects applying itself twice without undo.
-- **Ask first:** Command does not require undo. If undo is offered, define receiver ownership, failure behavior, and reversibility explicitly.
+A command is useful when requests need to travel through menus, queues, histories, or batches. Undo adds a second set of obligations: what state is saved, who can edit the receiver, and what happens when reversal fails? Some actions need compensation rather than literal undo.
 
 ## References
 
 - [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Command chapter.
-- [Oracle Java 21 — Runnable](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Runnable.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Oracle Java 21 — Runnable](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Runnable.html). A simple Java action interface to compare with this execute/undo contract.
 - [Refactoring.Guru — Command](https://refactoring.guru/design-patterns/command). Illustrated secondary explanation and comparisons.
-
-The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

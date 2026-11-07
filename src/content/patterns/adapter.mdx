@@ -12,17 +12,13 @@ import AdapterSource from '../../components/AdapterSource.astro';
 import AdapterDiagrams from '../../components/AdapterDiagrams.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-**Adapter translates an existing component’s interface into the interface your application expects.** It wraps the component, accepts calls in the application’s vocabulary, and delegates through the existing API.
+The clearance check needs a part length in millimeters. The older CAD API returns a part record with a length in inches. Neither interface is inherently wrong, but they do not fit together.
 
-Imagine an engineering application that checks part lengths in millimeters. An older CAD API returns a part record containing inches. The application should not repeat vendor-specific lookups and unit conversions in every clearance check.
+`CadLengthAdapter` implements the interface the clearance check expects. It calls the old API, converts the value, and translates the missing-part error. The clearance check can then work entirely in millimeters.
 
-A CAD length adapter implements the application’s `PartLengthSource` interface. It calls the old API, extracts the length, converts it, and translates the missing-part error. The client continues working in millimeters.
-
-> Use Adapter when you need an existing component and its interface or semantics do not match the client’s contract.
-
-## The problem before the pattern
+## Why use it
 
 Without an adapter, integration details leak into business logic:
 
@@ -44,7 +40,7 @@ Move the translation into an object implementing the expected interface. Keep th
 3. **Vendor replacement:** implement the same target interface for a new vendor so business workflows can stay stable.
 4. **Data-format boundaries:** expose an existing parser or storage API through the record types and errors expected by consuming code.
 
-An adapter cannot manufacture missing capabilities. If an API provides only estimated length, wrapping it cannot satisfy a target contract promising certified dimensions without additional evidence.
+Check that the source can satisfy the target’s guarantees. An estimated dimension remains an estimate after unit conversion.
 
 ## Structure and pattern roles
 
@@ -58,7 +54,7 @@ An adapter cannot manufacture missing capabilities. If an API provides only esti
 | Client | `ClearanceCheck` | Decide whether a length fits a supplied limit. |
 | Adapted result | `BigDecimal` | Express length in the target unit without implicit rounding. |
 
-The legacy API here is an in-memory teaching stand-in, not an implementation of Creo, Windchill, or any vendor SDK. Its `LegacyPart` record, lookup method, and missing-part exception illustrate an existing incompatible contract.
+The CAD client is simulated in memory. Its part record and missing-part exception stand in for the data and errors an existing API might expose.
 
 ## Define the translation contract
 
@@ -83,7 +79,7 @@ interface PartLengthSource {
 }
 ```
 
-Specify the unit in the API contract. A generic `getLength()` method makes an important assumption invisible. A larger system could introduce a validated quantity type rather than passing raw decimals.
+The method name records the unit. In a larger model, a quantity type could carry the unit and validation instead of relying on a raw decimal.
 
 ### 2. Describe the existing API
 
@@ -158,7 +154,7 @@ In a real remote API, the adapter also needs documented latency, cancellation, r
 
 ## Complete runnable example
 
-The listing and download use the same source file checked by CI. The example targets **Java 21** and runs as a single file.
+Save this as `AdapterDemo.java` and use Java 21 or later.
 
 <a href={path('downloads/AdapterDemo.java')} download="AdapterDemo.java">Download AdapterDemo.java ↓</a>
 
@@ -212,7 +208,7 @@ boolean fits = new ClearanceCheck(nativeSource)
         .fits("BRACKET-01", new BigDecimal("70"));
 ```
 
-This small exercise is a test stand-in, not a complete source API. It demonstrates substituting a target implementation without changing the client.
+This stand-in supplies the same target interface, so the clearance check needs no changes.
 
 For an adapter exercise, wrap a second API that returns micrometers as an integer. Convert to millimeters with an explicit decimal scale and reuse the same clearance cases. Keep missing-part semantics consistent across both sources.
 
@@ -235,7 +231,7 @@ javac --release 21 AdapterDemo.java AdapterChecks.java
 java AdapterChecks
 ```
 
-Failures throw `AssertionError`; no `-ea` flag is needed. CI compiles and checks all six completed examples on JDK 21. Real SDK integrations also need contract tests against supported vendor versions and representative source data.
+Failures throw `AssertionError`; no `-ea` flag is needed. The repository test runner checks this example alongside the rest of the catalog. Real SDK integrations also need contract tests against supported vendor versions and representative source data.
 
 ## Tradeoffs and common mistakes
 
@@ -250,7 +246,7 @@ Failures throw `AssertionError`; no `-ea` flag is needed. CI compiles and checks
 
 Avoid letting vendor types leak through the target interface. Avoid filling the adapter with clearance decisions or other business policies. Do not confuse renaming methods with satisfying their semantics: units, nullability, ordering, side effects, and failures all matter.
 
-## Compare related patterns
+## Related patterns
 
 | Pattern | Intent | Compared with Adapter |
 | --- | --- | --- |
@@ -259,7 +255,7 @@ Avoid letting vendor types leak through the target interface. Avoid filling the 
 | Facade | Simplify access to a subsystem | Provides a convenient entry point rather than necessarily implementing an existing target contract. |
 | Proxy | Control access to an object | Usually preserves its contract while managing access or location. |
 
-These shapes can overlap in implementation. Identify the primary intent and promised contract rather than classifying every wrapper by its syntax alone.
+Several of these patterns use wrappers. What matters is why the wrapper exists and which contract it exposes.
 
 <a href={path('patterns/bridge/')}>Bridge guide →</a> · <a href={path('patterns/decorator/')}>Decorator guide →</a> · <a href={path('patterns/facade/')}>Facade guide →</a> · <a href={path('patterns/proxy/')}>Proxy guide →</a>
 
@@ -269,14 +265,9 @@ These shapes can overlap in implementation. Identify the primary intent and prom
 
 `Arrays.asList` exposes an array through a `List` view. The view is fixed-size and backed by the array; it is not an independent copy or a fully resizable list. This demonstrates why an adapted interface still needs a precise behavioral contract.
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** translate an existing component into the expected contract.
-- **Target:** what the client already needs.
-- **Adaptee:** the existing incompatible API.
-- **Adapter:** delegate, convert, and preserve semantics.
-- **Verify:** values, units, boundaries, errors, and ownership.
-- **Ask first:** does the adaptee really support the promised behavior?
+The adapter belongs at the integration boundary, where units, identifiers, data shape, and errors are translated. Keep clearance policy in the application. If the old API cannot supply the information the target promises, change the contract or reject the operation; a wrapper cannot fill that gap.
 
 ## References
 
@@ -286,5 +277,3 @@ These shapes can overlap in implementation. Identify the primary intent and prom
 - [NIST — SI Units: Length](https://www.nist.gov/pml/owm/si-units-length). The exact inch-to-millimeter conversion used in the example.
 - [Oracle Java 21 — BigDecimal](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/math/BigDecimal.html). Decimal construction, arithmetic, and numeric comparison.
 - [Refactoring.Guru — Adapter](https://refactoring.guru/design-patterns/adapter). An illustrated secondary explanation of object and class adapters.
-
-The CAD API and integration example are original teaching material, with no dependency on a vendor SDK. Pattern names and roles follow the GoF catalog.

@@ -12,17 +12,13 @@ import FactoryMethodSource from '../../components/FactoryMethodSource.astro';
 import FactoryMethodDiagrams from '../../components/FactoryMethodDiagrams.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-**Factory Method gives a superclass a creation hook that subclasses can override.** The superclass runs shared logic against a product interface; a subclass decides which concrete product supports that logic.
+The export workflow is the same for text and HTML: validate the input, obtain a formatter, then format the report. Only the formatter changes.
 
-Imagine a report-export workflow that validates inputs, obtains a formatter, and formats a report. The workflow stays the same for text and HTML. A text exporter supplies a text formatter; an HTML exporter supplies an HTML formatter.
+Factory Method puts a creation hook in that shared workflow. `ReportExport.export()` calls `createFormatter()`, and a subclass supplies the formatter. The subclass inherits the workflow instead of copying it.
 
-The important part is that the inherited workflow calls the overridable creation method. Simply putting `new` inside a method named `create` does not by itself demonstrate the GoF pattern.
-
-> Use Factory Method when an existing inheritance-based workflow needs a controlled extension point for choosing a collaborator.
-
-## The problem before the pattern
+## Why use it
 
 A workflow might directly construct its formatter:
 
@@ -36,7 +32,7 @@ String export(String title, List<String> tools) {
 
 Now the workflow is tied to HTML. Copying it for text duplicates its validation and orchestration. Adding format conditionals inside it mixes selection with the workflow.
 
-Replace the constructor call with `createFormatter()`, declared on the creator. Subclasses implement that hook while inheriting the same `export` method. Startup still needs to choose a concrete creator; the pattern relocates that decision rather than eliminating it.
+Replace the constructor call with `createFormatter()`. Each subclass implements that hook and inherits `export()`. Startup still chooses the exporter; the shared workflow no longer needs to make that choice.
 
 ## Practical use cases
 
@@ -90,7 +86,7 @@ abstract static class ReportExport {
 
 `export` validates the title and takes an unmodifiable snapshot of the tool list before selecting the formatter. Null lists and null elements are rejected. Strings are immutable, so no element-level copying is needed here.
 
-The workflow is `final` to keep this teaching example’s extension point narrow. The factory hook is `protected` so callers use the workflow rather than treating product construction as its public API. Neither modifier is required by the pattern; they express this example’s contract.
+Here, `export()` is final so subclasses extend only the creation step. The protected hook keeps formatter construction behind the public workflow. Other implementations can choose different visibility and extension rules.
 
 Do not call an overridable factory method from the superclass constructor: subclass initialization may not have completed yet.
 
@@ -130,7 +126,7 @@ ReportExport exporter = new HtmlReportExport();
 String report = exporter.export("Engineering Tools", List.of("Cameo", "GitLab"));
 ```
 
-The complete demo translates a command-line format into a concrete creator. That selection switch is a simple factory-style decision at the composition root; the GoF Factory Method is the overridable hook inside the creator hierarchy.
+The switch in `main` selects an exporter from the command-line argument. The Factory Method being illustrated is `createFormatter()`, which the inherited `export()` calls through dynamic dispatch.
 
 ## Runtime sequence
 
@@ -142,7 +138,7 @@ This implementation creates a fresh formatter per export. Factory Method does no
 
 ## Complete runnable example
 
-The listing and download use the same source file verified by CI. It targets **Java 21** and keeps the types nested so it can run as a single file.
+Save this as `FactoryMethodDemo.java` and use Java 21 or later.
 
 <a href={path('downloads/FactoryMethodDemo.java')} download="FactoryMethodDemo.java">Download FactoryMethodDemo.java ↓</a>
 
@@ -232,7 +228,7 @@ javac --release 21 FactoryMethodDemo.java FactoryMethodChecks.java
 java FactoryMethodChecks
 ```
 
-Failures throw `AssertionError`; no `-ea` flag is needed. CI compiles and checks all three completed pattern examples on JDK 21.
+Failures throw `AssertionError`; no `-ea` flag is needed. The repository test runner checks this example alongside the rest of the catalog.
 
 ## Tradeoffs and common mistakes
 
@@ -248,7 +244,7 @@ Avoid hard-coding a concrete product inside the shared workflow, copying the wor
 
 The creator’s validation does not make arbitrary formatter implementations trustworthy. Define their behavioral expectations and test them. Caching a product does not automatically make it thread-safe.
 
-## Compare related approaches
+## Related patterns
 
 | Approach | Main variation point | Compared with Factory Method |
 | --- | --- | --- |
@@ -267,16 +263,11 @@ The earlier Abstract Factory guide supplies multiple matching components. Builde
 
 `AbstractCollection` provides shared collection behavior while requiring subclasses to implement `iterator()`. Operations such as `contains` use the iterator supplied by the concrete collection. You can read this as a factory-method role: the collection is the creator and the iterator is the product.
 
-This is an architectural interpretation of the documented API contract, not a claim that Java labels the method with a GoF annotation. The iterator’s lifecycle and supported operations still follow the collection’s contract.
+The useful connection is the relationship: shared collection code asks a subclass for an iterator, then uses the returned interface. The collection still defines the iterator’s supported operations and lifetime.
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** let subclasses choose the product used by inherited logic.
-- **Recognize it:** a creator workflow calls an overridable creation hook.
-- **Keep stable:** shared workflow and product interface when adding a product variant.
-- **Choose:** a concrete creator at startup.
-- **Expect:** inheritance and more subclasses.
-- **Ask first:** would directly injecting the product or a supplier be simpler?
+This fits a framework that already expects subclasses to extend a workflow. If the only variation is which formatter to use, injecting a formatter or a supplier is often simpler. The value here comes from reusing the inherited workflow, not from moving a constructor into a method.
 
 ## References
 
@@ -284,5 +275,3 @@ This is an architectural interpretation of the documented API contract, not a cl
 - [Oracle Java 21 — AbstractCollection](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/AbstractCollection.html). Shared collection behavior, the abstract iterator hook, and documented implementation requirements.
 - [Oracle Java 21 — List.copyOf](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/List.html#copyOf(java.util.Collection)). Snapshot behavior and null-element restrictions.
 - [Refactoring.Guru — Factory Method](https://refactoring.guru/design-patterns/factory-method). An illustrated secondary explanation of creators, products, and the creation hook.
-
-The report example and explanations are original teaching material. Pattern names and roles follow the GoF catalog.

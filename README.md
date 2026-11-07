@@ -1,6 +1,6 @@
 # Pattern Atlas
 
-A searchable field guide to all **23 Gang of Four design patterns**, with self-contained Java 21 examples.
+The 23 Gang of Four design patterns, explained with Java 21 examples.
 
 ## Catalog
 
@@ -10,9 +10,9 @@ A searchable field guide to all **23 Gang of Four design patterns**, with self-c
 | Structural | Adapter, Bridge, Composite, Decorator, Facade, Flyweight, Proxy |
 | Behavioral | Chain of Responsibility, Command, Interpreter, Iterator, Mediator, Memento, Observer, State, Strategy, Template Method, Visitor |
 
-Every guide includes a plain-English explanation, a problem statement, at least three use cases, a role diagram, implementation walkthrough, runtime trace, complete source listing and download, compile/run commands, expected output, behavior checks, extension work, tradeoffs, related-pattern links, and references.
+Each guide starts with a problem and works through an implementation. Diagrams show the roles and call flow; source downloads, expected output, and tests let you run the example yourself. The last sections cover tradeoffs and related patterns.
 
-The homepage groups patterns by category. Guides include category navigation, a table of contents, previous/next links, light/dark themes, copy controls, and print styles. Pagefind indexes all guides without a search server. Examples are teaching implementations with explicit limits, not production SDK integrations or substitutes for domain validation.
+The site uses Astro, TypeScript, and MDX. Pagefind provides full-text search over the guides and code. It builds to static files for GitHub Pages.
 
 ## Development
 
@@ -49,7 +49,7 @@ npm run test:java
 node scripts/run-java.mjs visitor
 ```
 
-The runner compiles into temporary directories, executes behavior checks with timeouts, and runs each demo. For the 17 newly completed guides it compares actual stdout against `expected.txt`; site checks verify the same fixture appears in the guide. No generated class files are retained.
+The runner compiles into temporary directories, executes behavior checks with timeouts, and runs each demo. Where an `expected.txt` fixture is present, the runner compares it with stdout; site checks verify that the guide shows the same output. No generated class files are retained.
 
 You can also run examples manually:
 
@@ -68,9 +68,9 @@ Abstract Factory, Builder, and Factory Method additionally accept `text` or `htm
 
 Guides are in `src/content/patterns/*.mdx`. Content collection validation checks category, order, intent, status, keywords, and related pattern slugs. The registry `src/data/examples.json` maps all 23 patterns to demo/check classes, download paths, and smoke-run arguments.
 
-The displayed listings and downloads import the same Java files CI compiles. The six earlier guides retain their existing source components and download URLs; the remaining guides share `SourceListing.astro` and a static download route. This keeps links stable while avoiding one new component and route per pattern.
+The displayed listings and downloads import the same Java files CI compiles. Most guides share `SourceListing.astro` and a static download route. The first six retain dedicated components and URLs.
 
-`PatternDiagram.astro` renders accessible, focused UML-style role diagrams. They show selected types and labeled collaborations; the role table covers the full example. `RuntimeSteps.astro` shows an ordered concrete execution trace. Diagrams and content use theme-aware colors and print styling.
+`PatternDiagram.astro` renders accessible, focused UML-style role diagrams. They show selected types and labeled collaborations; the role table covers the full example. `RuntimeSteps.astro` draws a trace through the example. Diagrams and content use theme-aware colors and print styling.
 
 `npm test` checks all guides are complete, catalog links and local anchors resolve, diagrams exist, displayed code and downloads match source, expected-output blocks match fixtures, and Pagefind assets were generated. It does not replace browser layout or interaction testing.
 
@@ -80,7 +80,7 @@ PR CI runs the Astro check, production build, Pagefind indexing, and site integr
 
 GitHub Pages deployment remains opt-in. After merging, enable **Settings → Pages → Source: GitHub Actions**, then run **Deploy to GitHub Pages** on `main`. Expected project URL: `https://jimnewpower.github.io/design-patterns/`. Content PRs do not deploy automatically.
 
-Use **Print / save PDF** on a guide for a print-oriented export. Automated curated PDF generation is not included.
+Use **Print / save PDF** on a guide to export it through the browser.
 
 ## References and licensing
 
