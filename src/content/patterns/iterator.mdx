@@ -13,13 +13,13 @@ import PatternDiagram from '../../components/PatternDiagram.astro';
 import RuntimeSteps from '../../components/RuntimeSteps.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-Iterator separates traversal state from the collection it traverses. Each caller receives its own cursor, asks whether another value exists, and requests the next value without seeing the collection representation.
+Two callers should be able to walk the same catalog without moving each other’s cursor. They also should not need access to the catalog’s internal list or indexes.
 
-> The edge cases are the contract: independent cursors, exhaustion, mutation, and resource lifetime matter as much as the happy-path loop.
+An iterator holds the traversal position separately from the collection. Each call to `iterator()` returns a new cursor with `hasNext()` and `next()`. Implementing Java’s `Iterable` interface also lets the catalog work in an enhanced-for loop.
 
-## The problem before the pattern
+## Why use it
 
 Exposing indexes and internal lists forces clients to know how a catalog is stored. Keeping a single cursor on the catalog also causes independent callers to interfere. Returning a new iterator per traversal isolates that state.
 
@@ -32,7 +32,7 @@ Exposing indexes and internal lists forces clients to know how a catalog is stor
 
 ## Structure and pattern roles
 
-<PatternDiagram {...{"id": "iterator-roles", "title": "Iterator role relationships", "description": "Iterable<String>: Aggregate contract; ToolCatalog: Concrete aggregate; Iterator<String>: Iterator contract; Anonymous iterator: Concrete iterator. The edge cases are the contract: independent cursors, exhaustion, mutation, and resource lifetime matter as much as the happy-path loop.", "nodes": [{"title": "Iterable<String>", "role": "Aggregate contract", "detail": "iterator()"}, {"title": "ToolCatalog", "role": "Concrete aggregate", "detail": "immutable tools snapshot"}, {"title": "Iterator<String>", "role": "Iterator contract", "detail": "hasNext(), next()"}, {"title": "Anonymous iterator", "role": "Concrete iterator", "detail": "per-instance index"}], "edges": [{"to": 0, "label": "implements", "relation": "implements", "from": 1}, {"to": 3, "label": "creates", "relation": "uses", "from": 1}, {"to": 2, "label": "implements", "relation": "implements", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+<PatternDiagram {...{"id": "iterator-roles", "title": "Iterator role relationships", "description": "Iterable<String> is the aggregate contract. ToolCatalog is the concrete aggregate. Iterator<String> is the iterator contract. Anonymous iterator is the concrete iterator.", "nodes": [{"title": "Iterable<String>", "role": "Aggregate contract", "detail": "iterator()"}, {"title": "ToolCatalog", "role": "Concrete aggregate", "detail": "immutable tools snapshot"}, {"title": "Iterator<String>", "role": "Iterator contract", "detail": "hasNext(), next()"}, {"title": "Anonymous iterator", "role": "Concrete iterator", "detail": "per-instance index"}], "edges": [{"to": 0, "label": "implements", "relation": "implements", "from": 1}, {"to": 3, "label": "creates", "relation": "uses", "from": 1}, {"to": 2, "label": "implements", "relation": "implements", "from": 3}], "caption": "ToolCatalog creates a new iterator for each traversal. Each iterator keeps its own index."}} />
 
 | Role | Java types | Responsibility |
 | --- | --- | --- |
@@ -43,23 +43,23 @@ Exposing indexes and internal lists forces clients to know how a catalog is stor
 
 ## Java walkthrough
 
-### 1. Snapshot collection input
+### 1. Take ownership of the collection values
 
-ToolCatalog copies its tool list and rejects null data through List.copyOf.
+`ToolCatalog` copies the supplied list. Later changes to that list cannot change an existing catalog.
 
-### 2. Create a new cursor
+### 2. Give each traversal its own index
 
-iterator returns a fresh anonymous object each time. Its index belongs to that object.
+Every call to `iterator()` creates a new anonymous iterator with its own `index` field. Interleaved callers therefore advance independently.
 
-### 3. Honor hasNext and next
+### 3. Handle the end correctly
 
-hasNext never advances. next checks exhaustion and throws NoSuchElementException instead of returning a sentinel.
+`hasNext()` only checks availability. `next()` advances after returning a value and throws `NoSuchElementException` once exhausted.
 
-### 4. Use standard traversal
+### 4. Use Java’s traversal syntax
 
-Iterable integrates with enhanced-for and forEach. remove inherits the unsupported-operation default.
+Implementing `Iterable` makes enhanced-for and `forEach` work. The iterator keeps the default unsupported `remove()` operation.
 
-The key collaboration is visible here (imports and surrounding types are in the complete listing):
+For example:
 
 ```java
 if (!hasNext()) throw new NoSuchElementException("End of catalog");
@@ -68,11 +68,11 @@ return tools.get(index++);
 
 ## Runtime sequence
 
-<RuntimeSteps id="iterator-runtime" title="One concrete execution trace" steps={[{"label": "Obtain iterator", "detail": "Enhanced-for asks the catalog for a fresh cursor."}, {"label": "Check availability", "detail": "hasNext compares the cursor index to list size."}, {"label": "Read and advance", "detail": "next returns Cameo, then GitLab on the next call."}, {"label": "Finish", "detail": "hasNext returns false; another next would throw."}]} />
+<RuntimeSteps id="iterator-runtime" title="Walking the tool catalog" steps={[{"label": "Obtain iterator", "detail": "Enhanced-for asks the catalog for a fresh cursor."}, {"label": "Check availability", "detail": "hasNext compares the cursor index to list size."}, {"label": "Read and advance", "detail": "next returns Cameo, then GitLab on the next call."}, {"label": "Finish", "detail": "hasNext returns false; another next would throw."}]} />
 
 ## Complete runnable example
 
-This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+Save this as `IteratorDemo.java` and use Java 21 or later.
 
 <a href={path('downloads/IteratorDemo.java')} download="IteratorDemo.java">Download IteratorDemo.java ↓</a>
 
@@ -107,7 +107,7 @@ Implement depth-first traversal for an assembly tree using an explicit stack. De
 
 ## Verification
 
-IteratorChecks.java verifies: Independent interleaved iterators, repeated hasNext calls, exhaustion, empty collections, unsupported removal, snapshot isolation, and enhanced traversal.
+`IteratorChecks.java` covers independent interleaved iterators, repeated hasNext calls, exhaustion, empty collections, unsupported removal, snapshot isolation, and enhanced traversal.
 
 ```bash
 cd examples/iterator
@@ -115,11 +115,11 @@ javac --release 21 IteratorDemo.java IteratorChecks.java
 java IteratorChecks
 ```
 
-Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+The checks throw `AssertionError` on failure. The console output is also checked against `expected.txt`.
 
-## Tradeoffs and implementation limits
+## Tradeoffs
 
-| Concern | Design judgment |
+| Decision | What to consider |
 | --- | --- |
 | Encapsulation | Storage stays hidden, but traversal order remains part of the public contract. |
 | Cursor state | Each traversal needs its own mutable object. |
@@ -127,7 +127,7 @@ Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the d
 
 The catalog is immutable and in memory. Each iterator is mutable and not thread-safe. Immutability removes collection-modification ambiguity in this example; it is not an example of a fail-fast mutable iterator. Java iterators do not automatically close external resources.
 
-## Compare related patterns
+## Related patterns
 
 | Approach | Distinction |
 | --- | --- |
@@ -136,17 +136,12 @@ The catalog is immutable and in memory. Each iterator is mutable and not thread-
 
 <a href={path('patterns/composite/')}> Composite guide →</a> · <a href={path('patterns/visitor/')}> Visitor guide →</a>
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** Traverse a collection without exposing its internal structure.
-- **Recognize it:** Exposing indexes and internal lists forces clients to know how a catalog is stored.
-- **Key collaboration:** iterator returns a fresh anonymous object each time.
-- **Ask first:** The edge cases are the contract: independent cursors, exhaustion, mutation, and resource lifetime matter as much as the happy-path loop.
+Use the standard Iterator and Iterable contracts when possible. Most of the work is in the edges: exhaustion, independent cursors, source mutation, and resource lifetime. A remote cursor that owns a connection needs more than a next method.
 
 ## References
 
 - [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Iterator chapter.
-- [Oracle Java 21 — Iterator](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Iterator.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Oracle Java 21 — Iterator](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Iterator.html). Exhaustion, optional removal, and the standard traversal contract.
 - [Refactoring.Guru — Iterator](https://refactoring.guru/design-patterns/iterator). Illustrated secondary explanation and comparisons.
-
-The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

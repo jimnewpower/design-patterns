@@ -12,15 +12,13 @@ import JavaSource from '../../components/JavaSource.astro';
 import FactoryDiagrams from '../../components/FactoryDiagrams.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-An Abstract Factory supplies a **family of related objects**. The code using those objects knows their interfaces, while the chosen factory determines their concrete implementations.
+A report needs a heading renderer and a table renderer. If the output is HTML, both should produce HTML. If it is plain text, both should produce text. Abstract Factory puts that choice in one place: select a factory, then ask it for the matching components.
 
-Imagine a report with a heading and a table. An HTML report needs an HTML heading and an HTML table. A plain-text report needs both text equivalents. Choose the family once, then let its factory create the members.
+`ReportGenerator` works with the renderer interfaces. The factory knows which concrete classes belong together. Changing output families changes the factory supplied at startup.
 
-> Use it when you have multiple product types and interchangeable families that should stay compatible.
-
-## The problem before the pattern
+## Why use it
 
 Without a factory, a report generator might choose every component itself:
 
@@ -34,9 +32,9 @@ if ("html".equals(format)) {
 }
 ```
 
-The generator now knows concrete classes and format-selection rules. Repeated selection logic can drift, leaving one part HTML and another plain text. Abstract Factory moves that responsibility into a dedicated collaborator, selected near application startup.
+The generator now knows every renderer class and repeats the format decision for each component. As more components appear, those choices can get out of sync. A factory supplies the set together, and startup chooses which factory to use.
 
-For this small example, injecting the two renderers directly would also be reasonable. The factory earns its place as creating a matching family becomes a recurring concern.
+With only two renderers, passing them directly to the constructor is reasonable too. The factory becomes more useful when several clients need the same matching set.
 
 ## Practical use cases
 
@@ -45,7 +43,7 @@ For this small example, injecting the two renderers directly would also be reaso
 3. **Database adapters:** supply a vendor’s SQL dialect, schema inspector, and bulk loader.
 4. **Cloud adapters:** supply storage, messaging, and secrets components for a selected provider.
 
-In each case, there are several product roles and a coherent set of implementations for each family.
+Each example has several kinds of component that need to come from the same family.
 
 ## Structure and pattern roles
 
@@ -59,7 +57,7 @@ In each case, there are several product roles and a coherent set of implementati
 | Concrete Product | HTML and text implementations of both renderers | Implement format-specific behavior. |
 | Client | `ReportGenerator` | Assemble a report through product interfaces. |
 
-“Abstract” here means expressed through an abstraction; a Java interface works well. It does not require a Java abstract class.
+The factory is a Java interface here. The GoF name does not require an abstract class.
 
 ## Java walkthrough
 
@@ -74,7 +72,7 @@ interface TableRenderer {
 }
 ```
 
-The generator needs these capabilities without knowing which format implements them. All snippets use `java.util.List` where needed; the complete listing includes its import.
+These interfaces are all the generator needs to render a heading and a table. The full listing includes the `java.util.List` import used in the snippets.
 
 ### 2. Implement each product family
 
@@ -104,7 +102,7 @@ interface ReportComponentFactory {
 }
 ```
 
-One creation method per product type makes the family visible. The return types are product interfaces.
+The factory has one method for each product role. Both return interfaces, so the generator can use the products without knowing their classes.
 
 ### 4. Create a factory for each family
 
@@ -130,7 +128,7 @@ ReportGenerator(ReportComponentFactory factory) {
 }
 ```
 
-`ReportGenerator` stores the product interfaces and delegates rendering to them. It has no HTML/text conditional and no concrete-product constructor calls.
+`ReportGenerator` asks the factory for its two renderers in the constructor, then uses those interfaces to assemble reports.
 
 ### 6. Choose the family at startup
 
@@ -149,7 +147,7 @@ When `generate` is called later, the client calls the two stored renderers and j
 
 ## Complete runnable example
 
-The listing below is imported from the same Java source used by the download and CI checks. It targets **Java 21**. The code is intentionally compact and keeps its types nested so it can run as a single file.
+Save this as `AbstractFactoryDemo.java` and use Java 21 or later.
 
 <a href={path('examples')} download="AbstractFactoryDemo.java">Download AbstractFactoryDemo.java ↓</a>
 
@@ -245,7 +243,7 @@ javac --release 21 AbstractFactoryDemo.java AbstractFactoryChecks.java
 java AbstractFactoryChecks
 ```
 
-A failure throws `AssertionError`; no `-ea` flag is required. CI runs these checks independently of the site build. The tests verify observable behavior rather than the private construction details.
+A failed check throws `AssertionError`; the JVM does not need the `-ea` flag.
 
 ## Tradeoffs and common mistakes
 
@@ -266,7 +264,7 @@ Avoid these mistakes:
 - Assuming a factory must create fresh instances every time. Reuse is a lifecycle decision, provided the product contract permits it.
 - Treating the pattern as proof that products are thread-safe or compatible. Those properties require their own contracts and verification.
 
-## Compare related approaches
+## Related patterns
 
 | Approach | Central concern | Compared with Abstract Factory |
 | --- | --- | --- |
@@ -277,14 +275,9 @@ Avoid these mistakes:
 
 <a href={path('patterns/factory-method/')}>Factory Method guide →</a> · <a href={path('patterns/builder/')}>Builder guide →</a> · <a href={path('patterns/strategy/')}>Strategy guide →</a>
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** create related products through interfaces.
-- **Recognize it:** several product roles, several matching families.
-- **Choose:** the concrete factory at startup.
-- **Keep stable:** the client and product interfaces when adding families.
-- **Expect friction:** when adding a new product role.
-- **Ask first:** would directly injecting the products be simpler?
+Use this when several related components must change together. The report example has two product roles and two output families, so the relationship is visible. For one interchangeable renderer, constructor injection is usually enough. Adding a family is straightforward; adding a new product role means changing every factory.
 
 ## References
 
@@ -292,5 +285,3 @@ Avoid these mistakes:
 - [Refactoring.Guru — Abstract Factory](https://refactoring.guru/design-patterns/abstract-factory). An illustrated secondary explanation with examples and comparisons.
 - [Oracle Java 21 — DocumentBuilderFactory](https://docs.oracle.com/en/java/javase/21/docs/api/java.xml/javax/xml/parsers/DocumentBuilderFactory.html). A real Java factory API worth examining. It creates a builder product; by itself it does not demonstrate the multiple-product-family structure of this example.
 - [Oracle Java 21 — Java launcher](https://docs.oracle.com/en/java/javase/21/docs/specs/man/java.html). Reference for single-file source execution.
-
-The explanations and Java report example in this guide are original teaching material. Pattern names and role terminology follow the GoF catalog.

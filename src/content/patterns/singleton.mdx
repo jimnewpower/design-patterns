@@ -12,17 +12,13 @@ import SingletonSource from '../../components/SingletonSource.astro';
 import SingletonDiagrams from '../../components/SingletonDiagrams.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-**Singleton controls access to one instance within a defined scope.** Callers obtain that instance through a common access point instead of constructing their own copies.
+Singleton provides one instance and a place to obtain it. In Java, that promise has a scope: a class loaded by one defining class loader has its instance; another class loader or JVM may have another.
 
-For example, a report application might use one read-only catalog mapping output formats to file extensions. At startup, the application obtains the catalog’s shared instance and passes it to the services that need it.
+The example uses a one-constant enum for a read-only report-format catalog. Startup obtains the instance and injects it into `ReportNamer`. The consumer gets an ordinary dependency, so its tests can still supply a fake.
 
-Two decisions are involved: **how many instances should exist, and how consumers obtain their dependency**. Singleton controls instance availability. Constructor injection can still make the dependency visible and replaceable in tests.
-
-> Choose Singleton only when one instance is a real lifetime requirement. A shared dependency created once at startup is often sufficient without enforcing global uniqueness.
-
-## The problem before the pattern
+## Why use it
 
 Constructing a new object at every call site can duplicate state or resource ownership:
 
@@ -40,9 +36,9 @@ if (instance == null) instance = new Catalog();
 return instance;
 ```
 
-This check-and-create sequence is not atomic. It also lacks a safe-publication protocol. In this guide, Java class initialization handles the instance lifecycle instead of a handwritten check.
+Two threads can both pass the null check, and the assignment provides no safe-publication protocol. The enum version uses Java’s class-initialization rules to coordinate creation and publication.
 
-The catalog example is deliberately small. Its immutable data would work with multiple copies; the example demonstrates the mechanism rather than claiming this catalog requires a Singleton in production.
+Multiple copies of this immutable catalog would work correctly. It is a small example of the mechanism, not a reason to require a Singleton in a real reporting application.
 
 ## Practical use cases
 
@@ -65,7 +61,7 @@ The catalog example is deliberately small. Its immutable data would work with mu
 | Client | `ReportNamer` | Use the injected catalog to produce a filename. |
 | Composition root | `SingletonDemo.main` | Obtain the Singleton and wire consumers. |
 
-The interface and constructor injection are supporting design choices, not required GoF roles. They keep instance-lifetime policy out of the consumer’s business logic.
+The interface lets `ReportNamer` accept the catalog without knowing its lifetime. Startup supplies the enum in production; a test can supply another implementation.
 
 ## Java walkthrough
 
@@ -98,7 +94,7 @@ enum ReportFormats implements FormatCatalog {
 
 The enum declares one instance. Java class initialization coordinates its construction and publication. Ordinary callers cannot create extra enum constants with `new`.
 
-The lookup map is unmodifiable and its keys and values are immutable strings. No method mutates owned state. That is why concurrent lookups are safe here; the `INSTANCE` declaration alone would not protect a mutable map or counter.
+Concurrent lookups are safe because the map and its string contents are immutable. Adding a mutable map or counter would require a separate concurrency decision.
 
 `Locale.ROOT` keeps case normalization independent of the host’s default locale. Unknown formats, including blank strings, fail instead of silently choosing a default.
 
@@ -142,7 +138,7 @@ The enum initializes when the class is initialized, normally at first active use
 
 ## Complete runnable example
 
-The listing and download use the same Java source checked in CI. The example targets **Java 21** and is runnable as one file.
+Save this as `SingletonDemo.java` and use Java 21 or later.
 
 <a href={path('downloads/SingletonDemo.java')} download="SingletonDemo.java">Download SingletonDemo.java ↓</a>
 
@@ -196,7 +192,7 @@ final class CatalogService {
 }
 ```
 
-This illustrates the holder mechanism; it is not the catalog implementation used by the runnable example. Java initializes the holder on its active use. A private constructor is useful access control, but should not be described as an absolute uniqueness guarantee against every reflective or serialization-based construction path.
+Java initializes the nested holder when it is first actively used. This is a class-based alternative to the enum. Its private constructor controls ordinary construction; reflection and serialization need separate consideration.
 
 For the enum, Java’s serialization mechanism resolves the named constant rather than reconstructing a new independent enum instance. That preserves identity, but does not turn enum serialization into a snapshot of mutable application state.
 
@@ -236,7 +232,7 @@ java SingletonChecks
 
 The concurrency check starts before the main thread actively uses the enum, coordinates workers with latches, uses bounded waits, and cancels tasks during cleanup. No timing sleeps are used. Run it in a fresh JVM to exercise first use again.
 
-These tests exercise behavior; the Java initialization specification supplies the underlying concurrency guarantee. No finite stress test proves an arbitrary implementation race-free. All five completed examples are checked on JDK 21 in CI.
+The concurrent test is a useful regression check. The safety guarantee comes from Java’s initialization rules, not from running a finite number of threads.
 
 ## Tradeoffs and common mistakes
 
@@ -251,7 +247,7 @@ These tests exercise behavior; the Java initialization specification supplies th
 
 Do not use Singleton merely because creating an object is inconvenient. Do not equate one instance with thread safety, or a final reference with immutable reachable state. Avoid unbounded caches and request-specific data living for the application’s entire lifetime.
 
-## Compare related approaches
+## Related patterns
 
 | Approach | Central concern | Compared with Singleton |
 | --- | --- | --- |
@@ -265,16 +261,11 @@ Do not use Singleton merely because creating an object is inconvenient. Do not e
 
 ## A Java API connection
 
-Java’s `Runtime.getRuntime()` exposes the runtime object associated with the application. Its API explicitly documents a single instance and prevents application construction of another. This demonstrates the recognizable access pattern; it does not mean every service should use static lookup.
+Java’s `Runtime.getRuntime()` exposes the runtime object associated with the application. Its API explicitly documents a single instance and prevents application construction of another. It is a useful example of a lifetime requirement built into the API.
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** restrict instance availability within an explicit scope.
-- **Access:** obtain the shared object through one defined point.
-- **Java option:** a single-constant enum when its constraints fit.
-- **Separate:** safe publication from mutable-operation safety.
-- **Verify:** identity, concurrent use, and testable consumers.
-- **Ask first:** could startup construct and inject one ordinary instance instead?
+Creating one object at startup and passing it to consumers is often all an application needs. Enforce a Singleton only when additional instances would be wrong. Keep request-specific state out of it, and define who owns shutdown if the instance holds external resources.
 
 ## References
 
@@ -283,5 +274,3 @@ Java’s `Runtime.getRuntime()` exposes the runtime object associated with the a
 - [Java Language Specification 21 — Detailed Initialization Procedure](https://docs.oracle.com/javase/specs/jls/se21/html/jls-12.html#jls-12.4.2). Coordination of class initialization and its failure behavior.
 - [Oracle Java 21 — Runtime](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Runtime.html). A production API with a documented single-instance access point.
 - [Oracle Java 21 — Executors](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Executors.html#newVirtualThreadPerTaskExecutor()). The virtual-thread executor used by the behavior checks.
-
-The example and explanations are original teaching material. Pattern names and roles follow the GoF catalog.

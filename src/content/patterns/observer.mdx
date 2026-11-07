@@ -13,13 +13,13 @@ import PatternDiagram from '../../components/PatternDiagram.astro';
 import RuntimeSteps from '../../components/RuntimeSteps.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-Observer lets interested objects subscribe to changes without the publisher knowing their concrete classes. A release event publisher holds listeners; when a report is released, it delivers the event to the current subscribers.
+A release can matter to several parts of an application: a view may refresh, an audit listener may record it, and a status panel may display it. The publisher should not need a hard-coded call to each one.
 
-> Subscription lifecycle and delivery semantics define the useful contract; a list of callbacks alone leaves too much unspecified.
+Observer lets those consumers subscribe. The publisher sends an event to the registered callbacks, and consumers can unsubscribe when they no longer need updates. How and when those callbacks run is part of the contract.
 
-## The problem before the pattern
+## Why use it
 
 Calling every concrete notification consumer from the release publisher couples it to dashboards, audit views, and other optional behavior. Subscriptions let those consumers join and leave without changing the publisher.
 
@@ -32,7 +32,7 @@ Calling every concrete notification consumer from the release publisher couples 
 
 ## Structure and pattern roles
 
-<PatternDiagram {...{"id": "observer-roles", "title": "Observer role relationships", "description": "ReleaseEvents: Subject; Consumer<String>: Observer contract; Subscription: Lifecycle handle; Listener lambda: Concrete observer. Subscription lifecycle and delivery semantics define the useful contract; a list of callbacks alone leaves too much unspecified.", "nodes": [{"title": "ReleaseEvents", "role": "Subject", "detail": "subscribe(listener), publish(name)"}, {"title": "Consumer<String>", "role": "Observer contract", "detail": "accept(event)"}, {"title": "Subscription", "role": "Lifecycle handle", "detail": "close() unsubscribes"}, {"title": "Listener lambda", "role": "Concrete observer", "detail": "prints release event"}], "edges": [{"to": 1, "label": "notifies", "relation": "uses", "from": 0}, {"to": 2, "label": "returns handle", "relation": "uses", "from": 0}, {"to": 1, "label": "implements", "relation": "implements", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+<PatternDiagram {...{"id": "observer-roles", "title": "Observer role relationships", "description": "ReleaseEvents is the subject. Consumer<String> is the observer contract. Subscription is the lifecycle handle. Listener lambda is the concrete observer.", "nodes": [{"title": "ReleaseEvents", "role": "Subject", "detail": "subscribe(listener), publish(name)"}, {"title": "Consumer<String>", "role": "Observer contract", "detail": "accept(event)"}, {"title": "Subscription", "role": "Lifecycle handle", "detail": "close() unsubscribes"}, {"title": "Listener lambda", "role": "Concrete observer", "detail": "prints release event"}], "edges": [{"to": 1, "label": "notifies", "relation": "uses", "from": 0}, {"to": 2, "label": "returns handle", "relation": "uses", "from": 0}, {"to": 1, "label": "implements", "relation": "implements", "from": 3}], "caption": "The subject holds callbacks and returns a handle for removing each registration."}} />
 
 | Role | Java types | Responsibility |
 | --- | --- | --- |
@@ -43,23 +43,23 @@ Calling every concrete notification consumer from the release publisher couples 
 
 ## Java walkthrough
 
-### 1. Register listeners
+### 1. Register a callback
 
-subscribe validates a listener and gives each registration a unique token. Repeated registrations are independent subscriptions.
+`subscribe()` stores the listener under a unique token. Registering the same callback twice creates two subscriptions.
 
-### 2. Return lifecycle control
+### 2. Return something the caller can close
 
-Closing the handle removes its token. Closing it twice is safe; try-with-resources scopes the listener lifetime.
+The returned handle removes that token. Closing it twice is harmless. The demo uses try-with-resources to tie the subscription to a scope.
 
-### 3. Snapshot recipients
+### 3. Choose recipients before delivery
 
-publish copies current listener values before invoking callbacks. Membership changes during delivery apply to the next event.
+`publish()` snapshots the current listeners. A callback can unsubscribe another listener, but that removal takes effect on the next event.
 
-### 4. Deliver synchronously
+### 4. Call listeners in order
 
-Callbacks run in registration order on the publisher thread. The first thrown exception stops later delivery and propagates.
+Delivery runs synchronously in registration order. The first callback exception stops delivery and reaches the publisher’s caller.
 
-The key collaboration is visible here (imports and surrounding types are in the complete listing):
+For example:
 
 ```java
 for (Consumer<String> listener : List.copyOf(listeners.values())) listener.accept(name);
@@ -67,11 +67,11 @@ for (Consumer<String> listener : List.copyOf(listeners.values())) listener.accep
 
 ## Runtime sequence
 
-<RuntimeSteps id="observer-runtime" title="One concrete execution trace" steps={[{"label": "Subscribe", "detail": "Client registers a release-printing callback."}, {"label": "Publish", "detail": "Subject snapshots current listeners for Engineering Tools."}, {"label": "Notify", "detail": "Callback prints the release name synchronously."}, {"label": "Unsubscribe", "detail": "Scope closes its handle; later events have no listener."}]} />
+<RuntimeSteps id="observer-runtime" title="Publishing a release event" steps={[{"label": "Subscribe", "detail": "Client registers a release-printing callback."}, {"label": "Publish", "detail": "Subject snapshots current listeners for Engineering Tools."}, {"label": "Notify", "detail": "Callback prints the release name synchronously."}, {"label": "Unsubscribe", "detail": "Scope closes its handle; later events have no listener."}]} />
 
 ## Complete runnable example
 
-This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+Save this as `ObserverDemo.java` and use Java 21 or later.
 
 <a href={path('downloads/ObserverDemo.java')} download="ObserverDemo.java">Download ObserverDemo.java ↓</a>
 
@@ -105,7 +105,7 @@ Change exception handling to attempt every listener and aggregate failures. Writ
 
 ## Verification
 
-ObserverChecks.java verifies: Registration order, unsubscribe and double-close, no-listener publication, changes during snapshot delivery, fail-fast listener exceptions, and null listeners/events.
+`ObserverChecks.java` covers registration order, unsubscribe and double-close, no-listener publication, changes during snapshot delivery, fail-fast listener exceptions, and null listeners/events.
 
 ```bash
 cd examples/observer
@@ -113,11 +113,11 @@ javac --release 21 ObserverDemo.java ObserverChecks.java
 java ObserverChecks
 ```
 
-Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+The checks throw `AssertionError` on failure. The console output is also checked against `expected.txt`.
 
-## Tradeoffs and implementation limits
+## Tradeoffs
 
-| Concern | Design judgment |
+| Decision | What to consider |
 | --- | --- |
 | Decoupling | Publisher does not know concrete consumers but delivery can be harder to trace. |
 | Lifecycle | Unsubscribe reliably to prevent retained listener graphs. |
@@ -125,7 +125,7 @@ Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the d
 
 This subject is single-threaded and synchronous. It provides no persistence, retry, exactly-once delivery, backpressure, or cross-process messaging. Listeners are strongly retained until removed. Reentrant publication is not blocked and can recurse; define a policy if callbacks can publish again.
 
-## Compare related patterns
+## Related patterns
 
 | Approach | Distinction |
 | --- | --- |
@@ -134,17 +134,12 @@ This subject is single-threaded and synchronous. It provides no persistence, ret
 
 <a href={path('patterns/mediator/')}> Mediator guide →</a> · <a href={path('patterns/command/')}> Command guide →</a> · <a href={path('patterns/proxy/')}> Proxy guide →</a>
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** Notify interested objects when something changes.
-- **Recognize it:** Calling every concrete notification consumer from the release publisher couples it to dashboards, audit views, and other optional behavior.
-- **Key collaboration:** Closing the handle removes its token.
-- **Ask first:** Subscription lifecycle and delivery semantics define the useful contract; a list of callbacks alone leaves too much unspecified.
+The subscription API is only the beginning. Decide ordering, exception handling, callback threads, and when removal takes effect. For a small synchronous subject, explicit handles and a documented failure policy are often enough.
 
 ## References
 
 - [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Observer chapter.
-- [Oracle Java 21 — Consumer](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/function/Consumer.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Oracle Java 21 — Consumer](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/function/Consumer.html). The callback interface used for event delivery.
 - [Refactoring.Guru — Observer](https://refactoring.guru/design-patterns/observer). Illustrated secondary explanation and comparisons.
-
-The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

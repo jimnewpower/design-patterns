@@ -13,13 +13,13 @@ import PatternDiagram from '../../components/PatternDiagram.astro';
 import RuntimeSteps from '../../components/RuntimeSteps.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-Flyweight shares reusable state across many objects to avoid storing the same information repeatedly. Labels have individual text and positions, but can share an immutable font-and-size Style. The style is intrinsic state; text and position are extrinsic state.
+Two labels need different text and screen positions, but they may use the same font and size. With enough labels, storing a separate copy of that style for each one can waste memory.
 
-> Share only what is intrinsic; the most important line is often the boundary between shared metadata and per-use context.
+Flyweight shares the style while keeping the text and position on each label. The shared data must be safe to share. Here, `Style` is immutable, and a factory reuses styles with equal font-and-size keys.
 
-## The problem before the pattern
+## Why use it
 
 Thousands of labels can duplicate identical formatting objects. Putting label coordinates inside a shared style would instead create accidental coupling. Separate state that truly varies per placement from state that can be shared safely.
 
@@ -32,7 +32,7 @@ Thousands of labels can duplicate identical formatting objects. Putting label co
 
 ## Structure and pattern roles
 
-<PatternDiagram {...{"id": "flyweight-roles", "title": "Flyweight role relationships", "description": "StyleFactory: Flyweight factory; Style: Immutable flyweight; Label: Context; Client: Consumer role. Share only what is intrinsic; the most important line is often the boundary between shared metadata and per-use context.", "nodes": [{"title": "StyleFactory", "role": "Flyweight factory", "detail": "get(font, size)"}, {"title": "Style", "role": "Immutable flyweight", "detail": "font, size"}, {"title": "Client", "role": "Consumer role", "detail": "creates label placements"}, {"title": "Label", "role": "Context", "detail": "text, y, style"}], "edges": [{"to": 1, "label": "interns", "from": 0}, {"to": 0, "label": "queries", "from": 2}, {"to": 3, "label": "creates", "from": 2}, {"to": 1, "label": "uses style", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+<PatternDiagram {...{"id": "flyweight-roles", "title": "Flyweight role relationships", "description": "StyleFactory is the flyweight factory. Style is the immutable flyweight. Client is the consumer role. Label is the context.", "nodes": [{"title": "StyleFactory", "role": "Flyweight factory", "detail": "get(font, size)"}, {"title": "Style", "role": "Immutable flyweight", "detail": "font, size"}, {"title": "Client", "role": "Consumer role", "detail": "creates label placements"}, {"title": "Label", "role": "Context", "detail": "text, y, style"}], "edges": [{"to": 1, "label": "interns", "from": 0}, {"to": 0, "label": "queries", "from": 2}, {"to": 3, "label": "creates", "from": 2}, {"to": 1, "label": "uses style", "from": 3}], "caption": "The client gets a shared Style from the factory, then supplies it to individual Label placements."}} />
 
 | Role | Java types | Responsibility |
 | --- | --- | --- |
@@ -43,23 +43,23 @@ Thousands of labels can duplicate identical formatting objects. Putting label co
 
 ## Java walkthrough
 
-### 1. Identify intrinsic state
+### 1. Choose the state that can be shared
 
-Style is an immutable record. Equality includes both font and size, so the cache key covers all shared state.
+Font and size belong in `Style`. The record is immutable, and both fields participate in equality. A cache key that left out size would reuse the wrong style.
 
-### 2. Reuse through a factory
+### 2. Reuse styles by their full key
 
-computeIfAbsent returns the existing style for an equal key. The example exposes cache size to make reuse observable.
+`StyleFactory.get()` builds a key and calls `computeIfAbsent`. An equal key returns the style already in the cache. A different font or size creates another entry.
 
-### 3. Keep placement external
+### 3. Keep placement on the label
 
-Label owns text and its y coordinate. Sharing its style never changes another label position.
+Each `Label` stores its own text and y coordinate. It references a shared style, but changing which label is drawn does not change that style.
 
-### 4. Render with both states
+### 4. Render using both objects
 
-draw combines placement data and style fields. The labels remain distinct objects with intentionally shared metadata.
+`draw()` reads the label’s placement and the style’s formatting. The labels remain separate even when their style references are identical.
 
-The key collaboration is visible here (imports and surrounding types are in the complete listing):
+For example:
 
 ```java
 return cache.computeIfAbsent(key, value -> value);
@@ -67,11 +67,11 @@ return cache.computeIfAbsent(key, value -> value);
 
 ## Runtime sequence
 
-<RuntimeSteps id="flyweight-runtime" title="One concrete execution trace" steps={[{"label": "First lookup", "detail": "Client requests Mono at size 12; factory stores a Style."}, {"label": "Repeated lookup", "detail": "An equal key retrieves the stored style instance."}, {"label": "Place independently", "detail": "Cameo uses y=10; GitLab uses y=40."}, {"label": "Render", "detail": "Each placement combines its own text with the shared style."}]} />
+<RuntimeSteps id="flyweight-runtime" title="Sharing a style between two labels" steps={[{"label": "First lookup", "detail": "Client requests Mono at size 12; factory stores a Style."}, {"label": "Repeated lookup", "detail": "An equal key retrieves the stored style instance."}, {"label": "Place independently", "detail": "Cameo uses y=10; GitLab uses y=40."}, {"label": "Render", "detail": "Each placement combines its own text with the shared style."}]} />
 
 ## Complete runnable example
 
-This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+Save this as `FlyweightDemo.java` and use Java 21 or later.
 
 <a href={path('downloads/FlyweightDemo.java')} download="FlyweightDemo.java">Download FlyweightDemo.java ↓</a>
 
@@ -107,7 +107,7 @@ Add a color field to Style and to its key. Verify that different colors never sh
 
 ## Verification
 
-FlyweightChecks.java verifies: Identity reuse for equal keys, different instances for different sizes, cache cardinality, independent label placement, and rejection of invalid styles.
+`FlyweightChecks.java` covers identity reuse for equal keys, different instances for different sizes, cache cardinality, independent label placement, and rejection of invalid styles.
 
 ```bash
 cd examples/flyweight
@@ -115,11 +115,11 @@ javac --release 21 FlyweightDemo.java FlyweightChecks.java
 java FlyweightChecks
 ```
 
-Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+The checks throw `AssertionError` on failure. The console output is also checked against `expected.txt`.
 
-## Tradeoffs and implementation limits
+## Tradeoffs
 
-| Concern | Design judgment |
+| Decision | What to consider |
 | --- | --- |
 | Memory | Sharing can help with many repeated objects, but keys and cache bookkeeping cost memory too. |
 | Immutability | Shared state must be stable or explicitly synchronized; a mutable style can affect every placement. |
@@ -127,7 +127,7 @@ Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the d
 
 The factory uses a single-threaded HashMap and retains every requested style for its lifetime. It allocates a candidate key per lookup. This teaching example demonstrates identity reuse; it is not a benchmark or proof of net memory savings.
 
-## Compare related patterns
+## Related patterns
 
 | Approach | Distinction |
 | --- | --- |
@@ -136,17 +136,12 @@ The factory uses a single-threaded HashMap and retains every requested style for
 
 <a href={path('patterns/singleton/')}> Singleton guide →</a> · <a href={path('patterns/prototype/')}> Prototype guide →</a> · <a href={path('patterns/composite/')}> Composite guide →</a>
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** Share common object state to reduce memory use.
-- **Recognize it:** Thousands of labels can duplicate identical formatting objects.
-- **Key collaboration:** computeIfAbsent returns the existing style for an equal key.
-- **Ask first:** Share only what is intrinsic; the most important line is often the boundary between shared metadata and per-use context.
+First measure whether repeated state accounts for enough memory to matter. Sharing an immutable style can help at scale, but the cache has its own cost and lifetime. Text, coordinates, and other per-placement data should stay outside the shared object.
 
 ## References
 
 - [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Flyweight chapter.
-- [Oracle Java 21 — Map.computeIfAbsent](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Map.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Oracle Java 21 — Map.computeIfAbsent](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Map.html). The computeIfAbsent operation used by the style cache.
 - [Refactoring.Guru — Flyweight](https://refactoring.guru/design-patterns/flyweight). Illustrated secondary explanation and comparisons.
-
-The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

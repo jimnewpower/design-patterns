@@ -13,13 +13,13 @@ import PatternDiagram from '../../components/PatternDiagram.astro';
 import RuntimeSteps from '../../components/RuntimeSteps.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-Strategy makes alternative algorithms interchangeable behind one contract. A tool report can preserve supplied order or sort alphabetically. The report delegates ordering and keeps its own job of joining the resulting names.
+One report should sort tool names alphabetically. Another should preserve the order supplied by the caller. Report assembly stays the same in either case.
 
-> Interchangeability is a behavioral promise, not just a matching method signature.
+Strategy extracts ordering into a collaborator. `ToolReport` receives an `Ordering`, uses it, and joins the result. A caller can supply a named implementation or a lambda without changing the report class.
 
-## The problem before the pattern
+## Why use it
 
 If one report class selects every sorting policy through growing conditionals, algorithm choices and report assembly become coupled. Inject an Ordering strategy so either responsibility can change without editing the other.
 
@@ -32,7 +32,7 @@ If one report class selects every sorting policy through growing conditionals, a
 
 ## Structure and pattern roles
 
-<PatternDiagram {...{"id": "strategy-roles", "title": "Strategy role relationships", "description": "ToolReport: Context; Ordering: Strategy interface; Alphabetical: Concrete strategy; AsProvided: Concrete strategy. Interchangeability is a behavioral promise, not just a matching method signature.", "nodes": [{"title": "ToolReport", "role": "Context", "detail": "ordering: Ordering"}, {"title": "Ordering", "role": "Strategy interface", "detail": "order(values)"}, {"title": "Alphabetical", "role": "Concrete strategy", "detail": "natural string ordering"}, {"title": "AsProvided", "role": "Concrete strategy", "detail": "preserves encounter order"}], "edges": [{"to": 1, "label": "delegates", "relation": "uses", "from": 0}, {"to": 1, "label": "implements", "relation": "implements", "from": 2}, {"to": 1, "label": "implements", "relation": "implements", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+<PatternDiagram {...{"id": "strategy-roles", "title": "Strategy role relationships", "description": "ToolReport is the context. Ordering is the strategy interface. Alphabetical is the concrete strategy. AsProvided is the concrete strategy.", "nodes": [{"title": "ToolReport", "role": "Context", "detail": "ordering: Ordering"}, {"title": "Ordering", "role": "Strategy interface", "detail": "order(values)"}, {"title": "Alphabetical", "role": "Concrete strategy", "detail": "natural string ordering"}, {"title": "AsProvided", "role": "Concrete strategy", "detail": "preserves encounter order"}], "edges": [{"to": 1, "label": "delegates", "relation": "uses", "from": 0}, {"to": 1, "label": "implements", "relation": "implements", "from": 2}, {"to": 1, "label": "implements", "relation": "implements", "from": 3}], "caption": "ToolReport holds an Ordering. Alphabetical, AsProvided, or a lambda can supply the policy."}} />
 
 | Role | Java types | Responsibility |
 | --- | --- | --- |
@@ -43,23 +43,23 @@ If one report class selects every sorting policy through growing conditionals, a
 
 ## Java walkthrough
 
-### 1. Define a precise algorithm contract
+### 1. Define what the policy receives and returns
 
-Strategies return tool names in their chosen order. Inputs are validated and copied by the context.
+`Ordering` takes tool names and returns them in the chosen order. The context copies input before handing it over.
 
-### 2. Implement interchangeable policies
+### 2. Implement the two policies
 
-Alphabetical sorts by Java natural String ordering. AsProvided preserves input order; both return stable lists.
+`Alphabetical` sorts with Java’s natural string order. `AsProvided` returns the values in their supplied order.
 
-### 3. Delegate from context
+### 3. Use the result in the report
 
-ToolReport supplies a defensive input snapshot, validates the returned list, and joins it.
+`ToolReport` checks the returned list and joins its names. It does not contain a format flag or an ordering conditional.
 
-### 4. Substitute without a context edit
+### 4. Supply another implementation
 
-A lambda can implement the functional strategy contract, as the reverse-order test demonstrates.
+The reverse-order test uses a lambda. A separate class is useful when the algorithm needs a name or state, but the contract works with either form.
 
-The key collaboration is visible here (imports and surrounding types are in the complete listing):
+For example:
 
 ```java
 List<String> ordered = List.copyOf(ordering.order(List.copyOf(values)));
@@ -67,11 +67,11 @@ List<String> ordered = List.copyOf(ordering.order(List.copyOf(values)));
 
 ## Runtime sequence
 
-<RuntimeSteps id="strategy-runtime" title="One concrete execution trace" steps={[{"label": "Select policy", "detail": "Client constructs ToolReport with Alphabetical."}, {"label": "Snapshot inputs", "detail": "Context validates and copies supplied tool names."}, {"label": "Execute strategy", "detail": "Ordering returns sorted names without changing caller data."}, {"label": "Assemble report", "detail": "Context joins the strategy result into one string."}]} />
+<RuntimeSteps id="strategy-runtime" title="Rendering alphabetically ordered names" steps={[{"label": "Select policy", "detail": "Client constructs ToolReport with Alphabetical."}, {"label": "Snapshot inputs", "detail": "Context validates and copies supplied tool names."}, {"label": "Execute strategy", "detail": "Ordering returns sorted names without changing caller data."}, {"label": "Assemble report", "detail": "Context joins the strategy result into one string."}]} />
 
 ## Complete runnable example
 
-This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+Save this as `StrategyDemo.java` and use Java 21 or later.
 
 <a href={path('downloads/StrategyDemo.java')} download="StrategyDemo.java">Download StrategyDemo.java ↓</a>
 
@@ -106,7 +106,7 @@ Add a case-insensitive ordering policy and explicitly define tie order. If the a
 
 ## Verification
 
-StrategyChecks.java verifies: Alphabetical order with duplicates, preserved supplied order, empty input, reverse lambda substitution, non-mutation of caller data, and invalid strategy input/output.
+`StrategyChecks.java` covers alphabetical order with duplicates, preserved supplied order, empty input, reverse lambda substitution, non-mutation of caller data, and invalid strategy input/output.
 
 ```bash
 cd examples/strategy
@@ -114,11 +114,11 @@ javac --release 21 StrategyDemo.java StrategyChecks.java
 java StrategyChecks
 ```
 
-Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+The checks throw `AssertionError` on failure. The console output is also checked against `expected.txt`.
 
-## Tradeoffs and implementation limits
+## Tradeoffs
 
-| Concern | Design judgment |
+| Decision | What to consider |
 | --- | --- |
 | Composition | Algorithms vary without subclassing the context, but clients must select an appropriate one. |
 | Contract consistency | Strategies should agree on inputs, side effects, and result guarantees. |
@@ -126,7 +126,7 @@ Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the d
 
 Natural string ordering is case-sensitive and is not locale-aware collation. The context fixes its strategy at construction. Strategies are trusted to fulfill their algorithm contract; no runtime proof of permutation or optimality is attempted.
 
-## Compare related patterns
+## Related patterns
 
 | Approach | Distinction |
 | --- | --- |
@@ -135,17 +135,12 @@ Natural string ordering is case-sensitive and is not locale-aware collation. The
 
 <a href={path('patterns/state/')}> State guide →</a> · <a href={path('patterns/template-method/')}> Template Method guide →</a> · <a href={path('patterns/bridge/')}> Bridge guide →</a>
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** Make alternative algorithms interchangeable.
-- **Recognize it:** If one report class selects every sorting policy through growing conditionals, algorithm choices and report assembly become coupled.
-- **Key collaboration:** Alphabetical sorts by Java natural String ordering.
-- **Ask first:** Interchangeability is a behavioral promise, not just a matching method signature.
+Use a strategy when callers should choose a policy without changing the context. Keep the behavioral contract precise enough that implementations can be substituted. If the algorithm is a one-liner, a lambda may be more readable than another named class.
 
 ## References
 
 - [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Strategy chapter.
-- [Oracle Java 21 — Comparator](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Comparator.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Oracle Java 21 — Comparator](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Comparator.html). Ordering contracts and the natural/reverse comparators used in the example.
 - [Refactoring.Guru — Strategy](https://refactoring.guru/design-patterns/strategy). Illustrated secondary explanation and comparisons.
-
-The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

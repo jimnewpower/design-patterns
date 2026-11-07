@@ -13,13 +13,13 @@ import PatternDiagram from '../../components/PatternDiagram.astro';
 import RuntimeSteps from '../../components/RuntimeSteps.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-Bridge separates a high-level abstraction from the implementation it delegates to, so both can change independently. A report can be detailed or summarized, while its rendering can be text or HTML. You can combine either report with either renderer without creating a subclass for every pair.
+A detailed report and a summary report answer different questions. Text and HTML are different ways to present either one. These are two separate choices, and combining them in one inheritance tree quickly produces classes such as `DetailedHtmlReport` and `SummaryTextReport`.
 
-> Two interfaces alone are not enough: identify the two independent axes and verify useful combinations along both.
+Bridge separates those choices. Each report holds a `Renderer`; the report decides what to include, and the renderer supplies the output syntax. Either side can gain a new implementation without adding every possible pairing.
 
-## The problem before the pattern
+## Why use it
 
 An inheritance-only design might grow DetailedTextReport, DetailedHtmlReport, SummaryTextReport, and SummaryHtmlReport. Adding another report style or output format multiplies combinations. Move rendering operations into a separate interface and let report objects hold a renderer.
 
@@ -32,7 +32,7 @@ An inheritance-only design might grow DetailedTextReport, DetailedHtmlReport, Su
 
 ## Structure and pattern roles
 
-<PatternDiagram {...{"id": "bridge-roles", "title": "Bridge role relationships", "description": "Report: Abstraction; Renderer: Implementor interface; DetailedReport: Refined abstraction; TextRenderer: Concrete implementor. Two interfaces alone are not enough: identify the two independent axes and verify useful combinations along both.", "nodes": [{"title": "Report", "role": "Abstraction", "detail": "render(title, tools)"}, {"title": "Renderer", "role": "Implementor interface", "detail": "heading(title), item(value)"}, {"title": "DetailedReport", "role": "Refined abstraction", "detail": "compose(title, tools)"}, {"title": "TextRenderer", "role": "Concrete implementor", "detail": "plain-text operations"}], "edges": [{"to": 1, "label": "delegates", "relation": "uses", "from": 0}, {"to": 0, "label": "extends", "relation": "extends", "from": 2}, {"to": 1, "label": "implements", "relation": "implements", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+<PatternDiagram {...{"id": "bridge-roles", "title": "Bridge role relationships", "description": "Report is the abstraction. Renderer is the implementor interface. DetailedReport is the refined abstraction. TextRenderer is the concrete implementor.", "nodes": [{"title": "Report", "role": "Abstraction", "detail": "render(title, tools)"}, {"title": "Renderer", "role": "Implementor interface", "detail": "heading(title), item(value)"}, {"title": "DetailedReport", "role": "Refined abstraction", "detail": "compose(title, tools)"}, {"title": "TextRenderer", "role": "Concrete implementor", "detail": "plain-text operations"}], "edges": [{"to": 1, "label": "delegates", "relation": "uses", "from": 0}, {"to": 0, "label": "extends", "relation": "extends", "from": 2}, {"to": 1, "label": "implements", "relation": "implements", "from": 3}], "caption": "Report type and renderer are separate choices. SummaryReport and HtmlRenderer follow the same relationships shown here."}} />
 
 | Role | Java types | Responsibility |
 | --- | --- | --- |
@@ -43,23 +43,23 @@ An inheritance-only design might grow DetailedTextReport, DetailedHtmlReport, Su
 
 ## Java walkthrough
 
-### 1. Define implementation primitives
+### 1. Give the renderer a small vocabulary
 
-Renderer exposes heading and item operations rather than the whole report algorithm. This keeps composition decisions in the abstraction.
+`Renderer` supplies a heading and an item. It does not decide which items belong in a report. That leaves report composition on the other side of the bridge.
 
-### 2. Compose through the bridge
+### 2. Pass the renderer to the report
 
-Report validates input and passes a defensive list snapshot to compose. Its constructor accepts the renderer, making the relationship explicit.
+`Report` takes a renderer in its constructor. Before calling `compose`, it checks the title and copies the tool list, so report variants receive the same input guarantees.
 
-### 3. Vary the abstraction
+### 3. Write the report variants
 
-DetailedReport iterates through tools; SummaryReport emits a count. Neither selects HTML or text classes.
+`DetailedReport` renders every tool. `SummaryReport` renders a count. Both ask their renderer for the pieces they need.
 
-### 4. Vary the implementation
+### 4. Combine the two choices
 
-TextRenderer and HtmlRenderer implement the same primitives. Startup combines a report and a renderer; four combinations require only two classes on each side.
+`TextRenderer` and `HtmlRenderer` supply the output syntax. Two report types and two renderers give four combinations without four combined subclasses.
 
-The key collaboration is visible here (imports and surrounding types are in the complete listing):
+For example:
 
 ```java
 new SummaryReport(new HtmlRenderer()).render("Tools", tools)
@@ -67,11 +67,11 @@ new SummaryReport(new HtmlRenderer()).render("Tools", tools)
 
 ## Runtime sequence
 
-<RuntimeSteps id="bridge-runtime" title="One concrete execution trace" steps={[{"label": "Select the pair", "detail": "Client combines SummaryReport with HtmlRenderer."}, {"label": "Run composition", "detail": "Report.render passes validated content to compose."}, {"label": "Delegate primitives", "detail": "SummaryReport requests a heading and a count item."}, {"label": "Return representation", "detail": "HTML renderer supplies fragments joined by the abstraction."}]} />
+<RuntimeSteps id="bridge-runtime" title="Rendering an HTML summary" steps={[{"label": "Select the pair", "detail": "Client combines SummaryReport with HtmlRenderer."}, {"label": "Run composition", "detail": "Report.render passes validated content to compose."}, {"label": "Delegate primitives", "detail": "SummaryReport requests a heading and a count item."}, {"label": "Return representation", "detail": "HTML renderer supplies fragments joined by the abstraction."}]} />
 
 ## Complete runnable example
 
-This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+Save this as `BridgeDemo.java` and use Java 21 or later.
 
 <a href={path('downloads/BridgeDemo.java')} download="BridgeDemo.java">Download BridgeDemo.java ↓</a>
 
@@ -109,7 +109,7 @@ Add a MarkdownRenderer, then run it with both report classes without modifying t
 
 ## Verification
 
-BridgeChecks.java verifies: All four report/renderer combinations, empty summaries, HTML text escaping, rejection of null dependencies, and preservation of report input.
+`BridgeChecks.java` covers all four report/renderer combinations, empty summaries, HTML text escaping, rejection of null dependencies, and preservation of report input.
 
 ```bash
 cd examples/bridge
@@ -117,11 +117,11 @@ javac --release 21 BridgeDemo.java BridgeChecks.java
 java BridgeChecks
 ```
 
-Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+The checks throw `AssertionError` on failure. The console output is also checked against `expected.txt`.
 
-## Tradeoffs and implementation limits
+## Tradeoffs
 
-| Concern | Design judgment |
+| Decision | What to consider |
 | --- | --- |
 | Two dimensions of change | Composition avoids a class for every pair, at the cost of an extra abstraction. |
 | Implementor interface | Keep operations useful to all report variants; overly specialized primitives create coupling. |
@@ -129,7 +129,7 @@ Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the d
 
 The example renders fragments, not complete HTML documents. HTML escaping handles text nodes only. It assumes single-line text for the plain renderer. Renderers are stateless here; a stateful drawing backend would need explicit ownership and concurrency rules.
 
-## Compare related patterns
+## Related patterns
 
 | Approach | Distinction |
 | --- | --- |
@@ -138,17 +138,12 @@ The example renders fragments, not complete HTML documents. HTML escaping handle
 
 <a href={path('patterns/adapter/')}> Adapter guide →</a> · <a href={path('patterns/strategy/')}> Strategy guide →</a> · <a href={path('patterns/abstract-factory/')}> Abstract Factory guide →</a>
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** Let an abstraction and its implementation vary independently.
-- **Recognize it:** An inheritance-only design might grow DetailedTextReport, DetailedHtmlReport, SummaryTextReport, and SummaryHtmlReport.
-- **Key collaboration:** Report validates input and passes a defensive list snapshot to compose.
-- **Ask first:** Two interfaces alone are not enough: identify the two independent axes and verify useful combinations along both.
+Look for two real sources of variation. Here, report detail and output format can change independently. If only the renderer varies, a single injected interface may be enough; a second hierarchy would add little.
 
 ## References
 
 - [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Bridge chapter.
-- [Oracle Java 21 — Objects.requireNonNull](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Objects.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Oracle Java 21 — Objects.requireNonNull](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Objects.html). Null checks used by the report constructor and render method.
 - [Refactoring.Guru — Bridge](https://refactoring.guru/design-patterns/bridge). Illustrated secondary explanation and comparisons.
-
-The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.

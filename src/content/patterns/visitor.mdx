@@ -13,13 +13,13 @@ import PatternDiagram from '../../components/PatternDiagram.astro';
 import RuntimeSteps from '../../components/RuntimeSteps.astro';
 import { path } from '../../data/navigation';
 
-## The idea in plain English
+## How it works
 
-Visitor adds operations to a stable object structure by dispatching an operation to the concrete element type. Parts and assemblies accept a visitor; a mass visitor totals grams while an outline visitor prints names. The element classes do not contain those operations.
+A parts tree may need several operations: total its mass, print an outline, calculate a cost, or check a rule. Putting all of them on every element can make the model cumbersome.
 
-> Use Visitor when operations change more frequently than element types, and state who owns traversal.
+Visitor groups the code for each operation in a separate class. Parts and assemblies accept a visitor and dispatch to its type-specific method. This works best when the element types are fairly stable and the list of operations keeps growing.
 
-## The problem before the pattern
+## Why use it
 
 A stable part tree may need mass, cost, export, and validation operations. Adding every operation directly to each element bloats the model. A visitor keeps one operation together across element types, provided those types are relatively stable.
 
@@ -32,7 +32,7 @@ A stable part tree may need mass, cost, export, and validation operations. Addin
 
 ## Structure and pattern roles
 
-<PatternDiagram {...{"id": "visitor-roles", "title": "Visitor role relationships", "description": "Item: Element interface; Visitor<R>: Visitor interface; Part / Assembly: Concrete elements; MassVisitor: Concrete visitor. Use Visitor when operations change more frequently than element types, and state who owns traversal.", "nodes": [{"title": "Item", "role": "Element interface", "detail": "accept(visitor)"}, {"title": "Visitor<R>", "role": "Visitor interface", "detail": "visitPart, visitAssembly"}, {"title": "Part / Assembly", "role": "Concrete elements", "detail": "dispatch to typed visit methods"}, {"title": "MassVisitor", "role": "Concrete visitor", "detail": "recursive mass aggregation"}], "edges": [{"to": 1, "label": "accepts", "relation": "uses", "from": 0}, {"to": 0, "label": "implements", "relation": "implements", "from": 2}, {"to": 1, "label": "implements", "relation": "implements", "from": 3}], "caption": "Focused UML-style role view. Hollow triangles indicate inheritance or interface implementation; other arrows show the labeled collaboration. Additional concrete types are described below."}} />
+<PatternDiagram {...{"id": "visitor-roles", "title": "Visitor role relationships", "description": "Item is the element interface. Visitor<R> is the visitor interface. Part / Assembly is the concrete elements. MassVisitor is the concrete visitor.", "nodes": [{"title": "Item", "role": "Element interface", "detail": "accept(visitor)"}, {"title": "Visitor<R>", "role": "Visitor interface", "detail": "visitPart, visitAssembly"}, {"title": "Part / Assembly", "role": "Concrete elements", "detail": "dispatch to typed visit methods"}, {"title": "MassVisitor", "role": "Concrete visitor", "detail": "recursive mass aggregation"}], "edges": [{"to": 1, "label": "accepts", "relation": "uses", "from": 0}, {"to": 0, "label": "implements", "relation": "implements", "from": 2}, {"to": 1, "label": "implements", "relation": "implements", "from": 3}], "caption": "Elements select the typed visit method. Each concrete visitor supplies a different operation."}} />
 
 | Role | Java types | Responsibility |
 | --- | --- | --- |
@@ -43,23 +43,23 @@ A stable part tree may need mass, cost, export, and validation operations. Addin
 
 ## Java walkthrough
 
-### 1. Keep element structure stable
+### 1. Keep the element types small
 
-Part and Assembly are immutable records behind a sealed Item interface.
+`Part` and `Assembly` hold the model data and implement `Item`. They do not contain mass or outline algorithms.
 
-### 2. Perform double dispatch
+### 2. Dispatch to the element-specific method
 
-accept calls visitPart(this) or visitAssembly(this). Runtime element dispatch chooses the accept body; visitor dispatch chooses the operation implementation.
+A part calls `visitor.visitPart(this)`; an assembly calls `visitAssembly(this)`. The element and visitor together select the method body.
 
-### 3. Put an operation together
+### 3. Implement an operation in one visitor
 
-MassVisitor handles leaves and groups in one class, using exact addition to reject overflow.
+`MassVisitor` returns a leaf’s stored grams and totals a group with `Math.addExact`. Its two methods belong together because they implement one analysis.
 
-### 4. Choose traversal ownership
+### 4. Let the visitor choose traversal
 
-Visitors recurse into assembly children themselves. OutlineVisitor selects its own formatting, and a test-only count visitor adds an operation without changing elements.
+The assembly visit recurses into children. `OutlineVisitor` formats those results, while a test-only visitor counts leaves without changing the elements.
 
-The key collaboration is visible here (imports and surrounding types are in the complete listing):
+For example:
 
 ```java
 public <R> R accept(Visitor<R> visitor) { return visitor.visitPart(this); }
@@ -67,11 +67,11 @@ public <R> R accept(Visitor<R> visitor) { return visitor.visitPart(this); }
 
 ## Runtime sequence
 
-<RuntimeSteps id="visitor-runtime" title="One concrete execution trace" steps={[{"label": "Accept mass visitor", "detail": "Client asks the root assembly to accept MassVisitor."}, {"label": "Typed group dispatch", "detail": "Assembly invokes visitAssembly on that visitor."}, {"label": "Visit children", "detail": "Visitor recursively accepts each child and sums results."}, {"label": "Return analysis", "detail": "The Sensor root returns 130 grams."}]} />
+<RuntimeSteps id="visitor-runtime" title="Calculating mass with a visitor" steps={[{"label": "Accept mass visitor", "detail": "Client asks the root assembly to accept MassVisitor."}, {"label": "Typed group dispatch", "detail": "Assembly invokes visitAssembly on that visitor."}, {"label": "Visit children", "detail": "Visitor recursively accepts each child and sums results."}, {"label": "Return analysis", "detail": "The Sensor root returns 130 grams."}]} />
 
 ## Complete runnable example
 
-This self-contained example targets **Java 21**. Its displayed listing and download are built from the same source file compiled by CI. Types are nested to keep the example runnable as one file.
+Save this as `VisitorDemo.java` and use Java 21 or later.
 
 <a href={path('downloads/VisitorDemo.java')} download="VisitorDemo.java">Download VisitorDemo.java ↓</a>
 
@@ -106,7 +106,7 @@ Add a CostVisitor using a supplied part-price map and explicit missing-price err
 
 ## Verification
 
-VisitorChecks.java verifies: Leaf and nested aggregates, outline traversal order, empty assemblies, a new count operation, invalid mass/input, and arithmetic overflow.
+`VisitorChecks.java` covers leaf and nested aggregates, outline traversal order, empty assemblies, a new count operation, invalid mass/input, and arithmetic overflow.
 
 ```bash
 cd examples/visitor
@@ -114,11 +114,11 @@ javac --release 21 VisitorDemo.java VisitorChecks.java
 java VisitorChecks
 ```
 
-Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the demo’s actual console output against the checked-in `expected.txt`. These checks exercise observable behavior rather than merely counting classes.
+The checks throw `AssertionError` on failure. The console output is also checked against `expected.txt`.
 
-## Tradeoffs and implementation limits
+## Tradeoffs
 
-| Concern | Design judgment |
+| Decision | What to consider |
 | --- | --- |
 | New operations | Add a visitor without editing the existing elements. |
 | New element types | Change the visitor interface and update every operation. |
@@ -126,7 +126,7 @@ Failures throw `AssertionError`; no `-ea` flag is needed. CI also compares the d
 
 The model is an immutable tree with integral grams. Visitors perform recursive traversal, so deep or cyclic graphs need another policy. Visitor methods intentionally know concrete element types. This is not a general traversal API for unknown types loaded at runtime.
 
-## Compare related patterns
+## Related patterns
 
 | Approach | Distinction |
 | --- | --- |
@@ -135,17 +135,12 @@ The model is an immutable tree with integral grams. Visitors perform recursive t
 
 <a href={path('patterns/composite/')}> Composite guide →</a> · <a href={path('patterns/iterator/')}> Iterator guide →</a> · <a href={path('patterns/interpreter/')}> Interpreter guide →</a>
 
-## Quick reference
+## Choosing this pattern
 
-- **Intent:** Add operations to an object structure without putting each operation in its classes.
-- **Recognize it:** A stable part tree may need mass, cost, export, and validation operations.
-- **Key collaboration:** accept calls visitPart(this) or visitAssembly(this).
-- **Ask first:** Use Visitor when operations change more frequently than element types, and state who owns traversal.
+Visitor makes adding an operation cheap and adding an element type expensive. Choose it when that matches the model’s direction of change. Keep traversal ownership clear so a visitor does not accidentally process children twice or skip them.
 
 ## References
 
 - [Gamma, Helm, Johnson, and Vlissides — Design Patterns: Elements of Reusable Object-Oriented Software](https://www.informit.com/store/design-patterns-elements-of-reusable-object-oriented-9780201633610). Original GoF catalog; see the Visitor chapter.
-- [Oracle Java 21 — FileVisitor](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/nio/file/FileVisitor.html). Supporting Java contract or related API for further study; the teaching example is its own implementation.
+- [Oracle Java 21 — FileVisitor](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/nio/file/FileVisitor.html). A JDK visitor API with typed callbacks for file-tree traversal.
 - [Refactoring.Guru — Visitor](https://refactoring.guru/design-patterns/visitor). Illustrated secondary explanation and comparisons.
-
-The example, diagrams, and explanations are original teaching material. They do not reproduce the GoF book.
