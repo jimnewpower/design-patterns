@@ -8,7 +8,8 @@
     "build": "astro build && pagefind --site dist",
     "preview": "astro preview --host 0.0.0.0",
     "test": "node scripts/check-site.mjs",
-    "test:java": "node scripts/run-java.mjs"
+    "test:java": "node scripts/run-java.mjs",
+    "icons": "node scripts/generate-icons.mjs"
   },
   "repository": {
     "type": "git",
@@ -30,6 +31,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
+    "@resvg/resvg-js": "^2.6.2",
     "typescript": "^6.0.3"
   },
   "private": true,
