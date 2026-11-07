@@ -1,0 +1,8 @@
+---
+import icons from '../data/pattern-icons.json';
+interface Props { slug: string; class?: string }
+const { slug, class: className } = Astro.props;
+const icon = icons[slug as keyof typeof icons];
+if (!icon) throw new Error(`No icon for pattern: ${slug}`);
+---
+<svg class:list={['pattern-icon',className]} viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" set:html={icon.markup} />

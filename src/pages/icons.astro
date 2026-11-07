@@ -1,0 +1,10 @@
+---
+import Base from '../layouts/Base.astro';
+import PatternIcon from '../components/PatternIcon.astro';
+import icons from '../data/pattern-icons.json';
+import { getCollection } from 'astro:content';
+import { categories, path } from '../data/navigation';
+const patterns = (await getCollection('patterns')).sort((a,b)=>a.data.order-b.data.order);
+---
+<Base title="Pattern icons" description="An original icon for each of the 23 Gang of Four design patterns."><main id="main" class="icon-gallery"><p class="eyebrow">Pattern Atlas</p><h1>Pattern icons</h1><p class="intro">Each icon shows a feature of the pattern. Select one to open its guide.</p><div class="actions"><a href={path('icons/pattern-atlas-icons.svg')} download>SVG contact sheet ↓</a><a href={path('icons/pattern-atlas-icons.png')} download>PNG contact sheet ↓</a><a href={path('#catalog')}>Browse the guides →</a></div>{categories.map(category=><section><h2>{category}</h2><div class="icon-gallery-grid">{patterns.filter(p=>p.data.category===category).map(p=><article><a class="icon-gallery-guide" href={path(`patterns/${p.id}/`)}><PatternIcon slug={p.id}/><h3>{p.data.title}</h3></a><p>{icons[p.id as keyof typeof icons].meaning}</p><a class="icon-download" href={path(`icons/${p.id}.svg`)} download>SVG ↓</a></article>)}</div></section>)}</main></Base>
+<style>.icon-gallery{max-width:1280px;margin:50px auto;padding:0 28px 50px}.icon-gallery section{margin-top:45px}.icon-gallery h1{font-size:2.8rem}.icon-gallery-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px}.icon-gallery article{padding:22px;border:1px solid var(--line);background:var(--surface);border-radius:9px}.icon-gallery-guide{display:block;color:var(--ink)}.icon-gallery-guide :global(.pattern-icon){width:48px;height:48px;color:var(--accent);margin-bottom:16px}.icon-gallery h3{font-size:1rem;letter-spacing:-.02em;margin:0 0 10px}.icon-gallery article p{font-size:.85rem;color:var(--muted);margin-bottom:12px}.icon-download{font-size:.8rem}@media(max-width:480px){.icon-gallery{padding-inline:20px}.icon-gallery-grid{grid-template-columns:1fr}.icon-gallery h1{font-size:2.2rem}}</style>

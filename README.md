@@ -14,6 +14,12 @@ Each guide starts with a problem and works through an implementation. Diagrams s
 
 The site uses Astro, TypeScript, and MDX. Pagefind provides full-text search over the guides and code. It builds to static files for GitHub Pages.
 
+## Pattern icons
+
+Each pattern has an original 32-unit SVG symbol. The catalog, guide titles, and sidebar use the same icon data; names remain visible beside every icon. `/icons/` explains the metaphors and links to the guides and individual SVG downloads. A contact sheet is available at `/icons/pattern-atlas-icons.svg`.
+
+Edit `src/data/pattern-icons.json`, then run `npm run icons` to regenerate individual SVGs and the SVG/PNG contact sheets. The raster exporter is a development dependency only. In the site, icons inherit the surrounding text color and work in both themes without a separate dark asset.
+
 ## Development
 
 Requires Node.js 24 LTS, npm, and a JDK 21 for the Java checks.
